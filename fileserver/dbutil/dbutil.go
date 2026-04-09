@@ -10,8 +10,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Database engine constants.
+const (
+	EngineMySQL    = "mysql"
+	EngineSQLite   = "sqlite"
+	EnginePostgres = "postgres"
+)
+
 // DBEngine tracks the active database type. Set during initialization.
-var DBEngine string // "mysql", "sqlite", or "postgres"
+var DBEngine string
 
 // InsertOrReplace returns an upsert statement that inserts a row or
 // overwrites it if a conflict on the primary key is found.
@@ -25,7 +32,7 @@ func InsertOrReplace(table, columns string) string {
 	placeholders := makePlaceholders(len(cols))
 
 	switch DBEngine {
-	case "postgres":
+	case EnginePostgres:
 		// First column is assumed to be the PK for ON CONFLICT.
 		sets := make([]string, 0, len(cols)-1)
 		for _, c := range cols[1:] {
@@ -38,7 +45,7 @@ func InsertOrReplace(table, columns string) string {
 		}
 		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s",
 			table, columns, placeholders, conflict, strings.Join(sets, ", "))
-	case "sqlite":
+	case EngineSQLite:
 		return fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES (%s)",
 			table, columns, placeholders)
 	default: // mysql
@@ -52,17 +59,17 @@ func InsertOrReplace(table, columns string) string {
 //
 //	dbutil.InsertOrIgnore("GarbageRepos", "repo_id")
 //	→ MySQL:    "INSERT IGNORE INTO GarbageRepos (repo_id) VALUES (?)"
-//	→ SQLite:   "INSERT OR IGNORE INTO GarbageRepos (repo_id) VALUES (?, ?)"
+//	→ SQLite:   "INSERT OR IGNORE INTO GarbageRepos (repo_id) VALUES (?)"
 //	→ Postgres: "INSERT INTO GarbageRepos (repo_id) VALUES ($1) ON CONFLICT DO NOTHING"
 func InsertOrIgnore(table, columns string) string {
 	cols := splitColumns(columns)
 	placeholders := makePlaceholders(len(cols))
 
 	switch DBEngine {
-	case "postgres":
+	case EnginePostgres:
 		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
 			table, columns, placeholders)
-	case "sqlite":
+	case EngineSQLite:
 		return fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES (%s)",
 			table, columns, placeholders)
 	default: // mysql
@@ -82,7 +89,11 @@ func splitColumns(columns string) []string {
 func makePlaceholders(n int) string {
 	ph := make([]string, n)
 	for i := range ph {
-		ph[i] = "?"
+		if DBEngine == EnginePostgres {
+			ph[i] = fmt.Sprintf("$%d", i+1)
+		} else {
+			ph[i] = "?"
+		}
 	}
 	return strings.Join(ph, ", ")
 }

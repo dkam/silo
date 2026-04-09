@@ -96,7 +96,7 @@ func loadDatabases() {
 	}
 
 	dbutil.DBEngine = dbOpt.DBEngine
-	if dbOpt.DBEngine == "sqlite" {
+	if dbOpt.DBEngine == dbutil.EngineSQLite {
 		loadSQLiteDatabases()
 	} else {
 		loadMySQLDatabases(dbOpt)
