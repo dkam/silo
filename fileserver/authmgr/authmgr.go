@@ -1,6 +1,7 @@
 package authmgr
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -15,6 +16,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/haiwen/seafile-server/fileserver/option"
+	log "github.com/sirupsen/logrus"
 )
 
 var db *sql.DB
@@ -159,4 +161,48 @@ func ValidateSessionToken(tokenString string) (string, error) {
 	}
 
 	return claims.Email, nil
+}
+
+// hashPassword creates a PBKDF2SHA256 hash string compatible with Seafile's format.
+func hashPassword(password string) (string, error) {
+	salt := make([]byte, 32)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate salt: %v", err)
+	}
+	iterations := 10000
+	derived := pbkdf2.Key([]byte(password), salt, iterations, sha256.Size, sha256.New)
+	return fmt.Sprintf("PBKDF2SHA256$%d$%s$%s",
+		iterations, hex.EncodeToString(salt), hex.EncodeToString(derived)), nil
+}
+
+// EnsureAdmin creates an admin user if it doesn't already exist.
+func EnsureAdmin(email, password string) error {
+	if email == "" || password == "" {
+		return nil
+	}
+
+	var exists int
+	err := db.QueryRow("SELECT COUNT(*) FROM EmailUser WHERE email=?", email).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check user: %v", err)
+	}
+	if exists > 0 {
+		log.Infof("Admin user %s already exists", email)
+		return nil
+	}
+
+	hash, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(
+		"INSERT INTO EmailUser (email, passwd, is_staff, is_active, ctime) VALUES (?, ?, 1, 1, ?)",
+		email, hash, time.Now().Unix())
+	if err != nil {
+		return fmt.Errorf("failed to create admin user: %v", err)
+	}
+
+	log.Infof("Created admin user: %s", email)
+	return nil
 }

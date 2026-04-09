@@ -288,8 +288,17 @@ func main() {
 
 	tokenstore.StartCleanup()
 	keycache.StartReaper()
-	authmgr.Init(ccnetPair.Read)
+	authmgr.Init(ccnetPair.Write)
 	api.Init(seafilePair.Read, seafilePair.Write)
+
+	// Create admin user from env vars if set
+	adminEmail := os.Getenv("SEAFILE_ADMIN_EMAIL")
+	adminPassword := os.Getenv("SEAFILE_ADMIN_PASSWORD")
+	if adminEmail != "" && adminPassword != "" {
+		if err := authmgr.EnsureAdmin(adminEmail, adminPassword); err != nil {
+			log.Fatalf("Failed to create admin user: %v", err)
+		}
+	}
 
 	fileopInit()
 
