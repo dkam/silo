@@ -95,6 +95,7 @@ func loadDatabases() {
 		log.Fatalf("Failed to load database: %v", err)
 	}
 
+	dbutil.DBEngine = dbOpt.DBEngine
 	if dbOpt.DBEngine == "sqlite" {
 		loadSQLiteDatabases()
 	} else {

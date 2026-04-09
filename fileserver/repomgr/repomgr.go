@@ -12,6 +12,7 @@ import (
 	// Change to non-blank imports when use
 	_ "github.com/haiwen/seafile-server/fileserver/blockmgr"
 	"github.com/haiwen/seafile-server/fileserver/commitmgr"
+	"github.com/haiwen/seafile-server/fileserver/dbutil"
 	"github.com/haiwen/seafile-server/fileserver/option"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -677,26 +678,9 @@ func removeVirtualRepoOndisk(repoID string, cloudMode bool) error {
 		return err
 	}
 
-	var exists int
-	sqlStr = "SELECT 1 FROM GarbageRepos WHERE repo_id=?"
-	row := seafileDB.QueryRowContext(ctx, sqlStr, repoID)
-	if err := row.Scan(&exists); err != nil {
-		if err != sql.ErrNoRows {
-			return err
-		}
-	}
-	if exists == 0 {
-		sqlStr = "INSERT INTO GarbageRepos (repo_id) VALUES (?)"
-		_, err := seafileWriteDB.ExecContext(ctx, sqlStr, repoID)
-		if err != nil {
-			return err
-		}
-	} else {
-		sqlStr = "REPLACE INTO GarbageRepos (repo_id) VALUES (?)"
-		_, err := seafileWriteDB.ExecContext(ctx, sqlStr, repoID)
-		if err != nil {
-			return err
-		}
+	_, err = seafileWriteDB.ExecContext(ctx, dbutil.InsertOrIgnore("GarbageRepos", "repo_id"), repoID)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -919,10 +903,10 @@ func CreateRepo(name, owner string) (string, error) {
 	if _, err := tx.ExecContext(ctx, "INSERT INTO Branch (name, repo_id, commit_id) VALUES ('master', ?, ?)", repoID, commit.CommitID); err != nil {
 		return "", fmt.Errorf("failed to insert branch: %v", err)
 	}
-	if _, err := tx.ExecContext(ctx, "REPLACE INTO RepoHead (repo_id, branch_name) VALUES (?, 'master')", repoID); err != nil {
+	if _, err := tx.ExecContext(ctx, dbutil.InsertOrReplace("RepoHead", "repo_id, branch_name"), repoID, "master"); err != nil {
 		return "", fmt.Errorf("failed to insert repo head: %v", err)
 	}
-	if _, err := tx.ExecContext(ctx, "REPLACE INTO RepoOwner (repo_id, owner_id) VALUES (?, ?)", repoID, owner); err != nil {
+	if _, err := tx.ExecContext(ctx, dbutil.InsertOrReplace("RepoOwner", "repo_id, owner_id"), repoID, owner); err != nil {
 		return "", fmt.Errorf("failed to insert repo owner: %v", err)
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO RepoInfo (repo_id, name, update_time, version, is_encrypted, last_modifier) VALUES (?, ?, ?, 1, 0, ?)",
@@ -976,7 +960,7 @@ func DeleteRepo(repoID string) error {
 	}
 
 	// Mark for garbage collection
-	if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO GarbageRepos (repo_id) VALUES (?)", repoID); err != nil {
+	if _, err := tx.ExecContext(ctx, dbutil.InsertOrIgnore("GarbageRepos", "repo_id"), repoID); err != nil {
 		// Non-fatal — GC will still find orphaned objects
 	}
 

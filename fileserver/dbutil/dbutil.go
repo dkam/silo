@@ -3,11 +3,89 @@ package dbutil
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "modernc.org/sqlite"
 )
+
+// DBEngine tracks the active database type. Set during initialization.
+var DBEngine string // "mysql", "sqlite", or "postgres"
+
+// InsertOrReplace returns an upsert statement that inserts a row or
+// overwrites it if a conflict on the primary key is found.
+//
+//	dbutil.InsertOrReplace("RepoHead", "repo_id, branch_name")
+//	→ MySQL:    "REPLACE INTO RepoHead (repo_id, branch_name) VALUES (?, ?)"
+//	→ SQLite:   "INSERT OR REPLACE INTO RepoHead (repo_id, branch_name) VALUES (?, ?)"
+//	→ Postgres: "INSERT INTO RepoHead (repo_id, branch_name) VALUES ($1, $2) ON CONFLICT (repo_id) DO UPDATE SET branch_name=EXCLUDED.branch_name"
+func InsertOrReplace(table, columns string) string {
+	cols := splitColumns(columns)
+	placeholders := makePlaceholders(len(cols))
+
+	switch DBEngine {
+	case "postgres":
+		// First column is assumed to be the PK for ON CONFLICT.
+		sets := make([]string, 0, len(cols)-1)
+		for _, c := range cols[1:] {
+			sets = append(sets, c+"=EXCLUDED."+c)
+		}
+		conflict := cols[0]
+		if len(sets) == 0 {
+			return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO NOTHING",
+				table, columns, placeholders, conflict)
+		}
+		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s",
+			table, columns, placeholders, conflict, strings.Join(sets, ", "))
+	case "sqlite":
+		return fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES (%s)",
+			table, columns, placeholders)
+	default: // mysql
+		return fmt.Sprintf("REPLACE INTO %s (%s) VALUES (%s)",
+			table, columns, placeholders)
+	}
+}
+
+// InsertOrIgnore returns a statement that inserts a row or silently
+// does nothing if a conflict on the primary key is found.
+//
+//	dbutil.InsertOrIgnore("GarbageRepos", "repo_id")
+//	→ MySQL:    "INSERT IGNORE INTO GarbageRepos (repo_id) VALUES (?)"
+//	→ SQLite:   "INSERT OR IGNORE INTO GarbageRepos (repo_id) VALUES (?, ?)"
+//	→ Postgres: "INSERT INTO GarbageRepos (repo_id) VALUES ($1) ON CONFLICT DO NOTHING"
+func InsertOrIgnore(table, columns string) string {
+	cols := splitColumns(columns)
+	placeholders := makePlaceholders(len(cols))
+
+	switch DBEngine {
+	case "postgres":
+		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
+			table, columns, placeholders)
+	case "sqlite":
+		return fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES (%s)",
+			table, columns, placeholders)
+	default: // mysql
+		return fmt.Sprintf("INSERT IGNORE INTO %s (%s) VALUES (%s)",
+			table, columns, placeholders)
+	}
+}
+
+func splitColumns(columns string) []string {
+	parts := strings.Split(columns, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func makePlaceholders(n int) string {
+	ph := make([]string, n)
+	for i := range ph {
+		ph[i] = "?"
+	}
+	return strings.Join(ph, ", ")
+}
 
 // DBPair holds separate read and write database connections.
 // For SQLite: write has MaxOpenConns(1) to serialize writes,

@@ -74,7 +74,7 @@ var (
 	// DB default timeout
 	DBOpTimeout time.Duration
 
-	// database
+	// database — use dbutil.DBEngine for portable SQL helpers
 	DBType string
 
 	// seahub

@@ -1,7 +1,6 @@
 package keycache
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -21,7 +20,7 @@ type DecryptKey struct {
 var keys sync.Map
 
 func cacheKey(repoID, user string) string {
-	return fmt.Sprintf("%s:%s", repoID, user)
+	return repoID + ":" + user
 }
 
 func SetKey(repoID, user string, key, iv []byte, version int) {
