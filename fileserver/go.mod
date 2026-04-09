@@ -1,6 +1,6 @@
 module github.com/haiwen/seafile-server/fileserver
 
-go 1.22
+go 1.25.0
 
 require (
 	github.com/dgraph-io/ristretto v0.2.0
@@ -11,7 +11,8 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/json-iterator/go v1.1.12
 	github.com/sirupsen/logrus v1.9.3
-	golang.org/x/text v0.3.8
+	golang.org/x/crypto v0.49.0
+	golang.org/x/text v0.35.0
 	gopkg.in/ini.v1 v1.55.0
 )
 
@@ -23,5 +24,5 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/smartystreets/goconvey v1.6.4 // indirect
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 )

@@ -34,8 +34,10 @@ import (
 	"github.com/haiwen/seafile-server/fileserver/commitmgr"
 	"github.com/haiwen/seafile-server/fileserver/diff"
 	"github.com/haiwen/seafile-server/fileserver/fsmgr"
+	"github.com/haiwen/seafile-server/fileserver/keycache"
 	"github.com/haiwen/seafile-server/fileserver/option"
 	"github.com/haiwen/seafile-server/fileserver/repomgr"
+	"github.com/haiwen/seafile-server/fileserver/tokenstore"
 	"github.com/haiwen/seafile-server/fileserver/utils"
 	"github.com/haiwen/seafile-server/fileserver/workerpool"
 	log "github.com/sirupsen/logrus"
@@ -219,42 +221,16 @@ func accessCB(rsp http.ResponseWriter, r *http.Request) *appError {
 }
 
 func parseCryptKey(rsp http.ResponseWriter, repoID string, user string, version int) (*seafileCrypt, *appError) {
-	key, err := rpcclient.Call("seafile_get_decrypt_key", repoID, user)
-	if err != nil {
+	dk := keycache.GetKey(repoID, user)
+	if dk == nil {
 		errMessage := "Repo is encrypted. Please provide password to view it."
 		return nil, &appError{nil, errMessage, http.StatusBadRequest}
 	}
 
-	cryptKey, ok := key.(map[string]interface{})
-	if !ok {
-		err := fmt.Errorf("failed to assert crypt key")
-		return nil, &appError{err, "", http.StatusInternalServerError}
-	}
-
-	seafileKey := new(seafileCrypt)
-	seafileKey.version = version
-
-	if cryptKey != nil {
-		key, ok := cryptKey["key"].(string)
-		if !ok {
-			err := fmt.Errorf("failed to parse crypt key")
-			return nil, &appError{err, "", http.StatusInternalServerError}
-		}
-		iv, ok := cryptKey["iv"].(string)
-		if !ok {
-			err := fmt.Errorf("failed to parse crypt iv")
-			return nil, &appError{err, "", http.StatusInternalServerError}
-		}
-		seafileKey.key, err = hex.DecodeString(key)
-		if err != nil {
-			err := fmt.Errorf("failed to decode key: %v", err)
-			return nil, &appError{err, "", http.StatusInternalServerError}
-		}
-		seafileKey.iv, err = hex.DecodeString(iv)
-		if err != nil {
-			err := fmt.Errorf("failed to decode iv: %v", err)
-			return nil, &appError{err, "", http.StatusInternalServerError}
-		}
+	seafileKey := &seafileCrypt{
+		key:     dk.Key,
+		iv:      dk.IV,
+		version: version,
 	}
 
 	return seafileKey, nil
@@ -2867,45 +2843,18 @@ type webaccessInfo struct {
 }
 
 func parseWebaccessInfo(token string) (*webaccessInfo, *appError) {
-	webaccess, err := rpcclient.Call("seafile_web_query_access_token", token)
-	if err != nil {
-		err := fmt.Errorf("failed to get web access token: %v", err)
-		return nil, &appError{err, "", http.StatusInternalServerError}
-	}
-	if webaccess == nil {
+	info := tokenstore.QueryToken(token)
+	if info == nil {
 		msg := "Access token not found"
-		return nil, &appError{err, msg, http.StatusForbidden}
+		return nil, &appError{nil, msg, http.StatusForbidden}
 	}
 
-	webaccessMap, ok := webaccess.(map[string]interface{})
-	if !ok {
-		return nil, &appError{nil, "", http.StatusInternalServerError}
+	accessInfo := &webaccessInfo{
+		repoID: info.RepoID,
+		objID:  info.ObjID,
+		op:     info.Op,
+		user:   info.User,
 	}
-
-	accessInfo := new(webaccessInfo)
-	repoID, ok := webaccessMap["repo-id"].(string)
-	if !ok {
-		return nil, &appError{nil, "", http.StatusInternalServerError}
-	}
-	accessInfo.repoID = repoID
-
-	id, ok := webaccessMap["obj-id"].(string)
-	if !ok {
-		return nil, &appError{nil, "", http.StatusInternalServerError}
-	}
-	accessInfo.objID = id
-
-	op, ok := webaccessMap["op"].(string)
-	if !ok {
-		return nil, &appError{nil, "", http.StatusInternalServerError}
-	}
-	accessInfo.op = op
-
-	user, ok := webaccessMap["username"].(string)
-	if !ok {
-		return nil, &appError{nil, "", http.StatusInternalServerError}
-	}
-	accessInfo.user = user
 
 	return accessInfo, nil
 }

@@ -3,7 +3,9 @@ package repomgr
 
 import (
 	"context"
+	"crypto/sha1"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	_ "github.com/haiwen/seafile-server/fileserver/blockmgr"
 	"github.com/haiwen/seafile-server/fileserver/commitmgr"
 	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -823,4 +826,61 @@ func SetLastGCID(repoID, clientID, gcID string) error {
 		}
 	}
 	return nil
+}
+
+// GenerateRepoToken creates a new per-repo sync token for the given user.
+// Token format matches the C implementation: SHA1(UUID) → 40-char hex string.
+func GenerateRepoToken(repoID, email string) (string, error) {
+	u := uuid.New().String()
+	h := sha1.New()
+	h.Write([]byte(u))
+	token := hex.EncodeToString(h.Sum(nil))
+
+	sqlStr := "INSERT INTO RepoUserToken (repo_id, email, token) VALUES (?, ?, ?)"
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+	if _, err := seafileDB.ExecContext(ctx, sqlStr, repoID, email, token); err != nil {
+		return "", fmt.Errorf("failed to insert repo token: %v", err)
+	}
+
+	return token, nil
+}
+
+// DeleteRepoToken removes a specific sync token.
+func DeleteRepoToken(repoID, token, email string) error {
+	sqlStr := "DELETE FROM RepoUserToken WHERE repo_id = ? AND token = ? AND email = ?"
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+	if _, err := seafileDB.ExecContext(ctx, sqlStr, repoID, token, email); err != nil {
+		return fmt.Errorf("failed to delete repo token: %v", err)
+	}
+	return nil
+}
+
+type RepoToken struct {
+	RepoID string
+	Email  string
+	Token  string
+}
+
+// ListRepoTokensByEmail returns all sync tokens for a user.
+func ListRepoTokensByEmail(email string) ([]RepoToken, error) {
+	sqlStr := "SELECT repo_id, email, token FROM RepoUserToken WHERE email = ?"
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+	rows, err := seafileDB.QueryContext(ctx, sqlStr, email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list repo tokens: %v", err)
+	}
+	defer rows.Close()
+
+	var tokens []RepoToken
+	for rows.Next() {
+		var t RepoToken
+		if err := rows.Scan(&t.RepoID, &t.Email, &t.Token); err != nil {
+			continue
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, nil
 }

@@ -38,8 +38,6 @@ const (
 )
 
 const (
-	seafileServerChannelEvent  = "seaf_server.event"
-	seafileServerChannelStats  = "seaf_server.stats"
 	emptySHA1                  = "0000000000000000000000000000000000000000"
 	tokenExpireTime            = 7200
 	permExpireTime             = 7200
@@ -910,19 +908,8 @@ func sendStatisticMsg(repoID, user, operation string, bytes uint64) {
 }
 
 func publishStatsEvent(rData *statsEventData) {
-	data := make(map[string]interface{})
-	data["msg_type"] = rData.eType
-	data["user_name"] = rData.user
-	data["repo_id"] = rData.repoID
-	data["bytes"] = rData.bytes
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Warnf("Failed to publish event: %v", err)
-		return
-	}
-	if _, err := rpcclient.Call("publish_event", seafileServerChannelStats, string(jsonData)); err != nil {
-		log.Warnf("Failed to publish event: %v", err)
-	}
+	log.Infof("stats event: type=%s user=%s repo=%s bytes=%d",
+		rData.eType, rData.user, rData.repoID, rData.bytes)
 }
 
 func saveLastGCID(repoID, token string) error {
@@ -1413,36 +1400,12 @@ func publishRepoEvent(rData *repoEventData) {
 	if rData.path == "" {
 		rData.path = "/"
 	}
-	data := make(map[string]interface{})
-	data["msg_type"] = rData.eType
-	data["user_name"] = rData.user
-	data["ip"] = rData.ip
-	data["user_agent"] = rData.clientName
-	data["repo_id"] = rData.repoID
-	data["file_path"] = rData.path
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Warnf("Failed to publish event: %v", err)
-		return
-	}
-	if _, err := rpcclient.Call("publish_event", seafileServerChannelEvent, string(jsonData)); err != nil {
-		log.Warnf("Failed to publish event: %v", err)
-	}
+	log.Infof("repo event: type=%s user=%s repo=%s path=%s",
+		rData.eType, rData.user, rData.repoID, rData.path)
 }
 
 func publishUpdateEvent(repoID string, commitID string) {
-	data := make(map[string]interface{})
-	data["msg_type"] = "repo-update"
-	data["repo_id"] = repoID
-	data["commit_id"] = commitID
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		log.Warnf("Failed to publish event: %v", err)
-		return
-	}
-	if _, err := rpcclient.Call("publish_event", seafileServerChannelEvent, string(jsonData)); err != nil {
-		log.Warnf("Failed to publish event: %v", err)
-	}
+	log.Infof("update event: repo=%s commit=%s", repoID, commitID)
 }
 
 func removeSyncAPIExpireCache() {

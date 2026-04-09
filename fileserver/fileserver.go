@@ -19,14 +19,18 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
+	"github.com/haiwen/seafile-server/fileserver/api"
+	"github.com/haiwen/seafile-server/fileserver/authmgr"
 	"github.com/haiwen/seafile-server/fileserver/blockmgr"
 	"github.com/haiwen/seafile-server/fileserver/commitmgr"
 	"github.com/haiwen/seafile-server/fileserver/fsmgr"
+	"github.com/haiwen/seafile-server/fileserver/keycache"
 	"github.com/haiwen/seafile-server/fileserver/metrics"
+	"github.com/haiwen/seafile-server/fileserver/middleware"
 	"github.com/haiwen/seafile-server/fileserver/option"
 	"github.com/haiwen/seafile-server/fileserver/repomgr"
-	"github.com/haiwen/seafile-server/fileserver/searpc"
 	"github.com/haiwen/seafile-server/fileserver/share"
+	"github.com/haiwen/seafile-server/fileserver/tokenstore"
 	"github.com/haiwen/seafile-server/fileserver/utils"
 	log "github.com/sirupsen/logrus"
 
@@ -36,7 +40,6 @@ import (
 var dataDir, absDataDir string
 var centralDir string
 var logFile, absLogFile string
-var rpcPipePath string
 var pidFilePath string
 var logFp *os.File
 
@@ -48,7 +51,6 @@ func init() {
 	flag.StringVar(&centralDir, "F", "", "central config directory")
 	flag.StringVar(&dataDir, "d", "", "seafile data directory")
 	flag.StringVar(&logFile, "l", "", "log file path")
-	flag.StringVar(&rpcPipePath, "p", "", "rpc pipe path")
 	flag.StringVar(&pidFilePath, "P", "", "pid file path")
 
 	env := os.Getenv("SEAFILE_LOG_TO_STDOUT")
@@ -268,7 +270,10 @@ func main() {
 
 	share.Init(ccnetDB, seafileDB, option.GroupTableName, option.CloudMode)
 
-	rpcClientInit()
+	tokenstore.StartCleanup()
+	keycache.StartReaper()
+	authmgr.Init(ccnetDB)
+	api.Init(seafileDB)
 
 	fileopInit()
 
@@ -336,18 +341,6 @@ func logRotate() {
 	utils.Dup(int(logFp.Fd()), int(os.Stderr.Fd()))
 }
 
-var rpcclient *searpc.Client
-
-func rpcClientInit() {
-	var pipePath string
-	if rpcPipePath != "" {
-		pipePath = filepath.Join(rpcPipePath, "seafile.sock")
-	} else {
-		pipePath = filepath.Join(absDataDir, "seafile.sock")
-	}
-	rpcclient = searpc.Init(pipePath, "seafserv-threaded-rpcserver", 10)
-}
-
 func newHTTPRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/protocol-version{slash:\\/?}", handleProtocolVersion)
@@ -409,6 +402,14 @@ func newHTTPRouter() *mux.Router {
 	r.Handle("/debug/pprof/goroutine", &profileHandler{pprof.Handler("goroutine")})
 	r.Handle("/debug/pprof/threadcreate", &profileHandler{pprof.Handler("threadcreate")})
 	r.Handle("/debug/pprof/trace", &traceHandler{})
+
+	// Management API
+	r.HandleFunc("/api/v1/auth/login", api.LoginHandler).Methods("POST")
+	apiRouter := r.PathPrefix("/api/v1").Subrouter()
+	apiRouter.Use(middleware.RequireAuth)
+	apiRouter.HandleFunc("/access-tokens", api.CreateAccessTokenHandler).Methods("POST")
+	apiRouter.HandleFunc("/repos", api.ListReposHandler).Methods("GET")
+	apiRouter.HandleFunc("/repos/{repoid}/sync-token", api.CreateRepoSyncTokenHandler).Methods("POST")
 
 	if option.HasRedisOptions {
 		r.Use(metrics.MetricMiddleware)
