@@ -186,3 +186,71 @@ func CreateRepoSyncTokenHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(syncTokenResponse{Token: token})
 }
+
+type createRepoRequest struct {
+	Name string `json:"name"`
+}
+
+type createRepoResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func CreateRepoHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	user := middleware.GetUserEmail(r)
+
+	var req createRepoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+
+	repoID, err := repomgr.CreateRepo(req.Name, user)
+	if err != nil {
+		log.Errorf("Failed to create repo: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(createRepoResponse{ID: repoID, Name: req.Name})
+}
+
+func DeleteRepoHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+	vars := mux.Vars(r)
+	repoID := vars["repoid"]
+
+	repo := repomgr.Get(repoID)
+	if repo == nil {
+		http.Error(w, "Repo not found", http.StatusNotFound)
+		return
+	}
+
+	// Only the owner can delete a repo
+	owner, err := repomgr.GetRepoOwner(repoID)
+	if err != nil {
+		log.Errorf("Failed to get repo owner: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if owner != user {
+		http.Error(w, "Only the repo owner can delete it", http.StatusForbidden)
+		return
+	}
+
+	if err := repomgr.DeleteRepo(repoID); err != nil {
+		log.Errorf("Failed to delete repo: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}

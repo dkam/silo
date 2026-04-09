@@ -886,3 +886,103 @@ func ListRepoTokensByEmail(email string) ([]RepoToken, error) {
 	}
 	return tokens, nil
 }
+
+const emptySHA1 = "0000000000000000000000000000000000000000"
+
+// CreateRepo creates a new unencrypted repository.
+// It generates a UUID, creates an initial commit with an empty root,
+// and inserts all required DB records.
+func CreateRepo(name, owner string) (string, error) {
+	repoID := uuid.New().String()
+
+	// Create initial commit with empty root
+	commit := commitmgr.NewCommit(repoID, "", emptySHA1, owner, "Created library")
+	commit.RepoName = name
+	commit.Version = 1
+	if err := commitmgr.Save(commit); err != nil {
+		return "", fmt.Errorf("failed to save initial commit: %v", err)
+	}
+
+	now := time.Now().Unix()
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+
+	tx, err := seafileWriteDB.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "INSERT INTO Repo (repo_id) VALUES (?)", repoID); err != nil {
+		return "", fmt.Errorf("failed to insert repo: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO Branch (name, repo_id, commit_id) VALUES ('master', ?, ?)", repoID, commit.CommitID); err != nil {
+		return "", fmt.Errorf("failed to insert branch: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, "REPLACE INTO RepoHead (repo_id, branch_name) VALUES (?, 'master')", repoID); err != nil {
+		return "", fmt.Errorf("failed to insert repo head: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, "REPLACE INTO RepoOwner (repo_id, owner_id) VALUES (?, ?)", repoID, owner); err != nil {
+		return "", fmt.Errorf("failed to insert repo owner: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO RepoInfo (repo_id, name, update_time, version, is_encrypted, last_modifier) VALUES (?, ?, ?, 1, 0, ?)",
+		repoID, name, now, owner); err != nil {
+		return "", fmt.Errorf("failed to insert repo info: %v", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return repoID, nil
+}
+
+// DeleteRepo removes a repository and all associated DB records.
+// Filesystem objects (commits, blocks, fs) are NOT deleted — GC handles that.
+func DeleteRepo(repoID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout*2)
+	defer cancel()
+
+	tx, err := seafileWriteDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	deletes := []string{
+		"DELETE FROM Repo WHERE repo_id = ?",
+		"DELETE FROM Branch WHERE repo_id = ?",
+		"DELETE FROM RepoHead WHERE repo_id = ?",
+		"DELETE FROM RepoOwner WHERE repo_id = ?",
+		"DELETE FROM RepoInfo WHERE repo_id = ?",
+		"DELETE FROM SharedRepo WHERE repo_id = ?",
+		"DELETE FROM RepoGroup WHERE repo_id = ?",
+		"DELETE FROM InnerPubRepo WHERE repo_id = ?",
+		"DELETE FROM RepoUserToken WHERE repo_id = ?",
+		"DELETE FROM RepoSize WHERE repo_id = ?",
+		"DELETE FROM RepoHistoryLimit WHERE repo_id = ?",
+		"DELETE FROM RepoValidSince WHERE repo_id = ?",
+	}
+
+	for _, sqlStr := range deletes {
+		if _, err := tx.ExecContext(ctx, sqlStr, repoID); err != nil {
+			return fmt.Errorf("failed to delete repo records: %v", err)
+		}
+	}
+
+	// Clean up virtual repos referencing this repo
+	if _, err := tx.ExecContext(ctx, "DELETE FROM VirtualRepo WHERE repo_id = ? OR origin_repo = ?", repoID, repoID); err != nil {
+		return fmt.Errorf("failed to delete virtual repo records: %v", err)
+	}
+
+	// Mark for garbage collection
+	if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO GarbageRepos (repo_id) VALUES (?)", repoID); err != nil {
+		// Non-fatal — GC will still find orphaned objects
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
+}
