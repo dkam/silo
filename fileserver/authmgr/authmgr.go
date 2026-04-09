@@ -3,6 +3,7 @@ package authmgr
 import (
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -96,7 +97,7 @@ func validatePBKDF2SHA256(password, storedPasswd string) bool {
 	derived := pbkdf2.Key([]byte(password), salt, iter, sha256.Size, sha256.New)
 	computedHash := hex.EncodeToString(derived)
 
-	return computedHash == expectedHash
+	return subtle.ConstantTimeCompare([]byte(computedHash), []byte(expectedHash)) == 1
 }
 
 func validateSHA256Salted(password, storedPasswd string) bool {
@@ -104,14 +105,14 @@ func validateSHA256Salted(password, storedPasswd string) bool {
 	h.Write([]byte(password))
 	h.Write(legacySalt)
 	computed := hex.EncodeToString(h.Sum(nil))
-	return computed == storedPasswd
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedPasswd)) == 1
 }
 
 func validateSHA1(password, storedPasswd string) bool {
 	h := sha1.New()
 	h.Write([]byte(password))
 	computed := hex.EncodeToString(h.Sum(nil))
-	return computed == storedPasswd
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedPasswd)) == 1
 }
 
 type SessionClaims struct {

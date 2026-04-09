@@ -14,10 +14,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var seafileDB *sql.DB
+var seafileDB *sql.DB      // read handle
+var seafileWriteDB *sql.DB // write handle
 
-func Init(sDB *sql.DB) {
-	seafileDB = sDB
+func Init(readDB, writeDB *sql.DB) {
+	seafileDB = readDB
+	seafileWriteDB = writeDB
 }
 
 type loginRequest struct {
@@ -30,6 +32,7 @@ type loginResponse struct {
 }
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -71,6 +74,7 @@ type accessTokenResponse struct {
 }
 
 func CreateAccessTokenHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	user := middleware.GetUserEmail(r)
 
 	var req accessTokenRequest
