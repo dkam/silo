@@ -4,7 +4,6 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -15,7 +14,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
@@ -23,6 +21,7 @@ import (
 	"github.com/haiwen/seafile-server/fileserver/authmgr"
 	"github.com/haiwen/seafile-server/fileserver/blockmgr"
 	"github.com/haiwen/seafile-server/fileserver/commitmgr"
+	"github.com/haiwen/seafile-server/fileserver/dbutil"
 	"github.com/haiwen/seafile-server/fileserver/fsmgr"
 	"github.com/haiwen/seafile-server/fileserver/keycache"
 	"github.com/haiwen/seafile-server/fileserver/metrics"
@@ -43,7 +42,7 @@ var logFile, absLogFile string
 var pidFilePath string
 var logFp *os.File
 
-var seafileDB, ccnetDB *sql.DB
+var seafilePair, ccnetPair *dbutil.DBPair
 
 var logToStdout bool
 
@@ -90,32 +89,78 @@ func (f *LogFormatter) Format(entry *log.Entry) ([]byte, error) {
 	return buf, nil
 }
 
-func loadCcnetDB() {
+func loadDatabases() {
 	dbOpt, err := option.LoadDBOption(centralDir)
 	if err != nil {
 		log.Fatalf("Failed to load database: %v", err)
 	}
 
-	var dsn string
+	if dbOpt.DBEngine == "sqlite" {
+		loadSQLiteDatabases()
+	} else {
+		loadMySQLDatabases(dbOpt)
+	}
+}
+
+func loadSQLiteDatabases() {
+	ccnetPath := filepath.Join(absDataDir, "ccnet.db")
+	seafilePath := filepath.Join(absDataDir, "seafile.db")
+
+	var err error
+	ccnetPair, err = dbutil.OpenSQLite(ccnetPath)
+	if err != nil {
+		log.Fatalf("Failed to open ccnet database: %v", err)
+	}
+
+	if err := dbutil.CreateCcnetTables(ccnetPair.Write); err != nil {
+		log.Fatalf("Failed to create ccnet tables: %v", err)
+	}
+
+	seafilePair, err = dbutil.OpenSQLite(seafilePath)
+	if err != nil {
+		log.Fatalf("Failed to open seafile database: %v", err)
+	}
+
+	if err := dbutil.CreateSeafileTables(seafilePair.Write); err != nil {
+		log.Fatalf("Failed to create seafile tables: %v", err)
+	}
+
+	log.Info("Using SQLite databases")
+}
+
+func loadMySQLDatabases(dbOpt *option.DBOption) {
+	ccnetDSN := buildMySQLDSN(dbOpt, dbOpt.CcnetDbName)
+	seafileDSN := buildMySQLDSN(dbOpt, dbOpt.SeafileDbName)
+
+	var err error
+	ccnetPair, err = dbutil.OpenMySQL(ccnetDSN)
+	if err != nil {
+		log.Fatalf("Failed to open ccnet database: %v", err)
+	}
+
+	seafilePair, err = dbutil.OpenMySQL(seafileDSN)
+	if err != nil {
+		log.Fatalf("Failed to open seafile database: %v", err)
+	}
+
+	log.Info("Using MySQL databases")
+}
+
+func buildMySQLDSN(dbOpt *option.DBOption, dbName string) string {
 	timeout := "&readTimeout=60s" + "&writeTimeout=60s"
+	var dsn string
 	if dbOpt.UseTLS && dbOpt.SkipVerify {
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=skip-verify%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbOpt.CcnetDbName, timeout)
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=skip-verify%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbName, timeout)
 	} else if dbOpt.UseTLS && !dbOpt.SkipVerify {
 		registerCA(dbOpt.CaPath)
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=custom%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbOpt.CcnetDbName, timeout)
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=custom%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbName, timeout)
 	} else {
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=%t%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbOpt.CcnetDbName, dbOpt.UseTLS, timeout)
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=%t%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbName, dbOpt.UseTLS, timeout)
 	}
 	if dbOpt.Charset != "" {
 		dsn = fmt.Sprintf("%s&charset=%s", dsn, dbOpt.Charset)
 	}
-	ccnetDB, err = sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
-	}
-	ccnetDB.SetConnMaxLifetime(5 * time.Minute)
-	ccnetDB.SetMaxOpenConns(8)
-	ccnetDB.SetMaxIdleConns(8)
+	return dsn
 }
 
 // registerCA registers CA to verify server cert.
@@ -131,35 +176,6 @@ func registerCA(capath string) {
 	mysql.RegisterTLSConfig("custom", &tls.Config{
 		RootCAs: rootCertPool,
 	})
-}
-
-func loadSeafileDB() {
-	dbOpt, err := option.LoadDBOption(centralDir)
-	if err != nil {
-		log.Fatalf("Failed to load database: %v", err)
-	}
-
-	var dsn string
-	timeout := "&readTimeout=60s" + "&writeTimeout=60s"
-	if dbOpt.UseTLS && dbOpt.SkipVerify {
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=skip-verify%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbOpt.SeafileDbName, timeout)
-	} else if dbOpt.UseTLS && !dbOpt.SkipVerify {
-		registerCA(dbOpt.CaPath)
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=custom%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbOpt.SeafileDbName, timeout)
-	} else {
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?tls=%t%s", dbOpt.User, dbOpt.Password, dbOpt.Host, dbOpt.Port, dbOpt.SeafileDbName, dbOpt.UseTLS, timeout)
-	}
-	if dbOpt.Charset != "" {
-		dsn = fmt.Sprintf("%s&charset=%s", dsn, dbOpt.Charset)
-	}
-
-	seafileDB, err = sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
-	}
-	seafileDB.SetConnMaxLifetime(5 * time.Minute)
-	seafileDB.SetMaxOpenConns(8)
-	seafileDB.SetMaxIdleConns(8)
 }
 
 func writePidFile(pid_file_path string) error {
@@ -249,8 +265,7 @@ func main() {
 	}
 
 	option.LoadFileServerOptions(centralDir)
-	loadCcnetDB()
-	loadSeafileDB()
+	loadDatabases()
 
 	level, err := log.ParseLevel(option.LogLevel)
 	if err != nil {
@@ -260,7 +275,7 @@ func main() {
 		log.SetLevel(level)
 	}
 
-	repomgr.Init(seafileDB)
+	repomgr.Init(seafilePair.Read, seafilePair.Write)
 
 	fsmgr.Init(centralDir, dataDir, option.FsCacheLimit)
 
@@ -268,12 +283,12 @@ func main() {
 
 	commitmgr.Init(centralDir, dataDir)
 
-	share.Init(ccnetDB, seafileDB, option.GroupTableName, option.CloudMode)
+	share.Init(ccnetPair.Read, seafilePair.Read, option.GroupTableName, option.CloudMode)
 
 	tokenstore.StartCleanup()
 	keycache.StartReaper()
-	authmgr.Init(ccnetDB)
-	api.Init(seafileDB)
+	authmgr.Init(ccnetPair.Read)
+	api.Init(seafilePair.Read, seafilePair.Write)
 
 	fileopInit()
 

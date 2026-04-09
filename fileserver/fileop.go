@@ -2129,7 +2129,7 @@ func genMergeDesc(repo *repomgr.Repo, mergedRoot, p1Root, p2Root string) string 
 func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID string, checkGC bool, lastGCID string) (gcConflict bool, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
 	defer cancel()
-	trans, err := seafileDB.BeginTx(ctx, nil)
+	trans, err := seafilePair.Write.BeginTx(ctx, nil)
 	if err != nil {
 		err := fmt.Errorf("failed to start transaction: %v", err)
 		return false, err

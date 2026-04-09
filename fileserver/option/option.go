@@ -353,6 +353,18 @@ func LoadDBOption(centralDir string) (*DBOption, error) {
 	if err != nil {
 		log.Warnf("failed to load database config: %v", err)
 	}
+
+	// Check env override for DB type
+	if dbType := os.Getenv("SEAFILE_DB_TYPE"); dbType != "" {
+		dbOpt.DBEngine = dbType
+	}
+
+	if dbOpt.DBEngine == "sqlite" {
+		// SQLite needs no host/user/password
+		DBType = "sqlite"
+		return dbOpt, nil
+	}
+
 	dbOpt = loadDBOptionFromEnv(dbOpt)
 
 	if dbOpt.Host == "" {
@@ -392,7 +404,7 @@ func loadDBOptionFromFile(centralDir string) (*DBOption, error) {
 	if err == nil {
 		dbEngine = key.String()
 	}
-	if dbEngine != "mysql" {
+	if dbEngine != "mysql" && dbEngine != "sqlite" {
 		return nil, fmt.Errorf("unsupported database %s.", dbEngine)
 	}
 	dbOpt.DBEngine = dbEngine

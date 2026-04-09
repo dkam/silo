@@ -653,7 +653,7 @@ func headCommitsMultiCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
 	defer cancel()
-	rows, err := seafileDB.QueryContext(ctx, sqlStr)
+	rows, err := seafilePair.Read.QueryContext(ctx, sqlStr)
 	if err != nil {
 		err := fmt.Errorf("Failed to get commit id: %v", err)
 		return &appError{err, "", http.StatusInternalServerError}
@@ -880,7 +880,7 @@ func getRepoStoreID(repoID string) (string, error) {
 	sqlStr := "SELECT repo_id, origin_repo FROM VirtualRepo where repo_id = ?"
 	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
 	defer cancel()
-	row := seafileDB.QueryRowContext(ctx, sqlStr, repoID)
+	row := seafilePair.Read.QueryRowContext(ctx, sqlStr, repoID)
 	if err := row.Scan(&rID, &originRepoID); err != nil {
 		if err == sql.ErrNoRows {
 			vInfo.storeID = repoID
@@ -1209,7 +1209,7 @@ func getHeadCommit(rsp http.ResponseWriter, r *http.Request) *appError {
 	var exists bool
 	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
 	defer cancel()
-	row := seafileDB.QueryRowContext(ctx, sqlStr, repoID)
+	row := seafilePair.Read.QueryRowContext(ctx, sqlStr, repoID)
 	if err := row.Scan(&exists); err != nil {
 		if err != sql.ErrNoRows {
 			log.Errorf("DB error when check repo %s existence: %v", repoID, err)
@@ -1229,7 +1229,7 @@ func getHeadCommit(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	var commitID string
 	sqlStr = "SELECT commit_id FROM Branch WHERE name='master' AND repo_id=?"
-	row = seafileDB.QueryRowContext(ctx, sqlStr, repoID)
+	row = seafilePair.Read.QueryRowContext(ctx, sqlStr, repoID)
 
 	if err := row.Scan(&commitID); err != nil {
 		if err != sql.ErrNoRows {
