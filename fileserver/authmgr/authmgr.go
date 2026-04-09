@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/haiwen/seafile-server/fileserver/dbutil"
 	"github.com/haiwen/seafile-server/fileserver/option"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,13 +39,15 @@ func ValidatePassword(email, password string) (string, error) {
 		return "", fmt.Errorf("invalid password")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+
 	var storedPasswd string
-	row := readDB.QueryRow("SELECT passwd FROM EmailUser WHERE email=?", email)
+	row := readDB.QueryRowContext(ctx, "SELECT passwd FROM EmailUser WHERE email=?", email)
 	err := row.Scan(&storedPasswd)
 	if err == sql.ErrNoRows {
-		// Try lowercased email
 		emailDown := strings.ToLower(email)
-		row = readDB.QueryRow("SELECT passwd FROM EmailUser WHERE email=?", emailDown)
+		row = readDB.QueryRowContext(ctx, "SELECT passwd FROM EmailUser WHERE email=?", emailDown)
 		err = row.Scan(&storedPasswd)
 		if err != nil {
 			return "", fmt.Errorf("user not found")
@@ -66,18 +69,19 @@ func validatePasswd(password, storedPasswd string) bool {
 		return false
 	}
 
-	hashLen := len(storedPasswd)
+	// Check for known prefix before falling back to length-based dispatch
+	if strings.HasPrefix(storedPasswd, "PBKDF2SHA256$") {
+		return validatePBKDF2SHA256(password, storedPasswd)
+	}
 
+	hashLen := len(storedPasswd)
 	switch {
 	case hashLen == sha256.Size*2:
-		// Legacy SHA256 with fixed salt
 		return validateSHA256Salted(password, storedPasswd)
 	case hashLen == sha1.Size*2:
-		// Legacy plain SHA1
 		return validateSHA1(password, storedPasswd)
 	default:
-		// PBKDF2SHA256$iter$salt$hash
-		return validatePBKDF2SHA256(password, storedPasswd)
+		return false
 	}
 }
 
@@ -125,7 +129,6 @@ type SessionClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateSessionToken creates a JWT session token for the given user.
 func GenerateSessionToken(email string) (string, error) {
 	now := time.Now()
 	claims := SessionClaims{
@@ -145,8 +148,6 @@ func GenerateSessionToken(email string) (string, error) {
 	return tokenString, nil
 }
 
-// ValidateSessionToken parses and validates a JWT session token.
-// Returns the user's email on success.
 func ValidateSessionToken(tokenString string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &SessionClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -166,7 +167,6 @@ func ValidateSessionToken(tokenString string) (string, error) {
 	return claims.Email, nil
 }
 
-// hashPassword creates a PBKDF2SHA256 hash string compatible with Seafile's format.
 func hashPassword(password string) (string, error) {
 	salt := make([]byte, 32)
 	if _, err := rand.Read(salt); err != nil {
@@ -179,21 +179,9 @@ func hashPassword(password string) (string, error) {
 }
 
 // EnsureAdmin creates an admin user if it doesn't already exist.
+// Uses INSERT OR IGNORE to avoid TOCTOU races.
 func EnsureAdmin(email, password string) error {
 	if email == "" || password == "" {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
-	defer cancel()
-
-	var exists int
-	err := readDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM EmailUser WHERE email=?", email).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("failed to check user: %v", err)
-	}
-	if exists > 0 {
-		log.Infof("Admin user %s already exists", email)
 		return nil
 	}
 
@@ -202,13 +190,20 @@ func EnsureAdmin(email, password string) error {
 		return err
 	}
 
-	_, err = writeDB.ExecContext(ctx,
-		"INSERT INTO EmailUser (email, passwd, is_staff, is_active, ctime) VALUES (?, ?, 1, 1, ?)",
-		email, hash, time.Now().Unix())
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+
+	sqlStr := dbutil.InsertOrIgnore("EmailUser", "email, passwd, is_staff, is_active, ctime")
+	result, err := writeDB.ExecContext(ctx, sqlStr, email, hash, 1, 1, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("failed to create admin user: %v", err)
 	}
 
-	log.Infof("Created admin user: %s", email)
+	rows, _ := result.RowsAffected()
+	if rows > 0 {
+		log.Infof("Created admin user: %s", email)
+	} else {
+		log.Infof("Admin user %s already exists", email)
+	}
 	return nil
 }

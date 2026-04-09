@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"net/url"
 
 	"github.com/gorilla/mux"
 	"github.com/haiwen/seafile-server/fileserver/authmgr"
@@ -25,6 +26,25 @@ func Init(readDB, writeDB *sql.DB) {
 	seafileWriteDB = writeDB
 }
 
+// writeJSON writes a JSON response with the given status code.
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Errorf("Failed to encode JSON response: %v", err)
+	}
+}
+
+// decodeJSON reads and decodes a JSON request body (max 1MB).
+func decodeJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -35,10 +55,8 @@ type loginResponse struct {
 }
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -61,8 +79,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(loginResponse{Token: token})
+	writeJSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
 type accessTokenRequest struct {
@@ -77,12 +94,10 @@ type accessTokenResponse struct {
 }
 
 func CreateAccessTokenHandler(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	user := middleware.GetUserEmail(r)
 
 	var req accessTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -92,9 +107,7 @@ func CreateAccessTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := tokenstore.CreateToken(req.RepoID, req.ObjID, req.Op, user, req.OneTime)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(accessTokenResponse{Token: token})
+	writeJSON(w, http.StatusOK, accessTokenResponse{Token: token})
 }
 
 type repoInfo struct {
@@ -111,6 +124,7 @@ func scanRepos(rows *sql.Rows) []repoInfo {
 		var name, isEncrypted sql.NullString
 		var updateTime sql.NullInt64
 		if err := rows.Scan(&repo.ID, &name, &updateTime, &isEncrypted); err != nil {
+			log.Warnf("Failed to scan repo row: %v", err)
 			continue
 		}
 		repo.Name = name.String
@@ -138,6 +152,10 @@ func ListReposHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	repos := scanRepos(rows)
+	seen := make(map[string]bool, len(repos))
+	for _, r := range repos {
+		seen[r.ID] = true
+	}
 
 	sharedRows, err := seafileDB.QueryContext(ctx,
 		"SELECT s.repo_id, i.name, i.update_time, i.is_encrypted "+
@@ -147,11 +165,15 @@ func ListReposHandler(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("Failed to query shared repos: %v", err)
 	} else {
 		defer sharedRows.Close()
-		repos = append(repos, scanRepos(sharedRows)...)
+		for _, r := range scanRepos(sharedRows) {
+			if !seen[r.ID] {
+				seen[r.ID] = true
+				repos = append(repos, r)
+			}
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(repos)
+	writeJSON(w, http.StatusOK, repos)
 }
 
 type syncTokenResponse struct {
@@ -163,14 +185,6 @@ func CreateRepoSyncTokenHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	repoID := vars["repoid"]
 
-	// Verify repo exists
-	repo := repomgr.Get(repoID)
-	if repo == nil {
-		http.Error(w, "Repo not found", http.StatusNotFound)
-		return
-	}
-
-	// Verify user has access
 	perm := share.CheckPerm(repoID, user)
 	if perm == "" {
 		http.Error(w, "Permission denied", http.StatusForbidden)
@@ -184,8 +198,7 @@ func CreateRepoSyncTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(syncTokenResponse{Token: token})
+	writeJSON(w, http.StatusOK, syncTokenResponse{Token: token})
 }
 
 type createRepoRequest struct {
@@ -198,12 +211,10 @@ type createRepoResponse struct {
 }
 
 func CreateRepoHandler(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	user := middleware.GetUserEmail(r)
 
 	var req createRepoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -219,9 +230,7 @@ func CreateRepoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(createRepoResponse{ID: repoID, Name: req.Name})
+	writeJSON(w, http.StatusCreated, createRepoResponse{ID: repoID, Name: req.Name})
 }
 
 func DeleteRepoHandler(w http.ResponseWriter, r *http.Request) {
@@ -229,17 +238,14 @@ func DeleteRepoHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	repoID := vars["repoid"]
 
-	repo := repomgr.Get(repoID)
-	if repo == nil {
-		http.Error(w, "Repo not found", http.StatusNotFound)
-		return
-	}
-
-	// Only the owner can delete a repo
 	owner, err := repomgr.GetRepoOwner(repoID)
 	if err != nil {
 		log.Errorf("Failed to get repo owner: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if owner == "" {
+		http.Error(w, "Repo not found", http.StatusNotFound)
 		return
 	}
 	if owner != user {
@@ -270,15 +276,15 @@ func ListDirHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	repoID := vars["repoid"]
 
-	repo := repomgr.Get(repoID)
-	if repo == nil {
-		http.Error(w, "Repo not found", http.StatusNotFound)
-		return
-	}
-
 	perm := share.CheckPerm(repoID, user)
 	if perm == "" {
 		http.Error(w, "Permission denied", http.StatusForbidden)
+		return
+	}
+
+	repo := repomgr.Get(repoID)
+	if repo == nil {
+		http.Error(w, "Repo not found", http.StatusNotFound)
 		return
 	}
 
@@ -286,6 +292,7 @@ func ListDirHandler(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+	path, _ = url.QueryUnescape(path)
 
 	dir, err := fsmgr.GetSeafdirByPath(repo.StoreID, repo.RootID, path)
 	if err != nil {
@@ -310,6 +317,5 @@ func ListDirHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(entries)
+	writeJSON(w, http.StatusOK, entries)
 }
