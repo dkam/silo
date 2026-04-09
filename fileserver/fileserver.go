@@ -288,7 +288,7 @@ func main() {
 
 	tokenstore.StartCleanup()
 	keycache.StartReaper()
-	authmgr.Init(ccnetPair.Write)
+	authmgr.Init(ccnetPair.Read, ccnetPair.Write)
 	api.Init(seafilePair.Read, seafilePair.Write)
 
 	// Create admin user from env vars if set

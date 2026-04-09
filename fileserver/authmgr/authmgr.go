@@ -1,6 +1,7 @@
 package authmgr
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -19,10 +20,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var db *sql.DB
+var readDB *sql.DB
+var writeDB *sql.DB
 
-func Init(ccnetDB *sql.DB) {
-	db = ccnetDB
+func Init(ccnetReadDB, ccnetWriteDB *sql.DB) {
+	readDB = ccnetReadDB
+	writeDB = ccnetWriteDB
 }
 
 // Legacy fixed salt used by old Seafile SHA256 password hashing.
@@ -36,12 +39,12 @@ func ValidatePassword(email, password string) (string, error) {
 	}
 
 	var storedPasswd string
-	row := db.QueryRow("SELECT passwd FROM EmailUser WHERE email=?", email)
+	row := readDB.QueryRow("SELECT passwd FROM EmailUser WHERE email=?", email)
 	err := row.Scan(&storedPasswd)
 	if err == sql.ErrNoRows {
 		// Try lowercased email
 		emailDown := strings.ToLower(email)
-		row = db.QueryRow("SELECT passwd FROM EmailUser WHERE email=?", emailDown)
+		row = readDB.QueryRow("SELECT passwd FROM EmailUser WHERE email=?", emailDown)
 		err = row.Scan(&storedPasswd)
 		if err != nil {
 			return "", fmt.Errorf("user not found")
@@ -181,8 +184,11 @@ func EnsureAdmin(email, password string) error {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), option.DBOpTimeout)
+	defer cancel()
+
 	var exists int
-	err := db.QueryRow("SELECT COUNT(*) FROM EmailUser WHERE email=?", email).Scan(&exists)
+	err := readDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM EmailUser WHERE email=?", email).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("failed to check user: %v", err)
 	}
@@ -196,7 +202,7 @@ func EnsureAdmin(email, password string) error {
 		return err
 	}
 
-	_, err = db.Exec(
+	_, err = writeDB.ExecContext(ctx,
 		"INSERT INTO EmailUser (email, passwd, is_staff, is_active, ctime) VALUES (?, ?, 1, 1, ?)",
 		email, hash, time.Now().Unix())
 	if err != nil {
