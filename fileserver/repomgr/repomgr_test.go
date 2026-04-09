@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 		fmt.Printf("Failed to open database: %v", err)
 		os.Exit(1)
 	}
-	Init(seafDB)
+	Init(seafDB, seafDB)
 	commitmgr.Init(seafileConfPath, seafileDataDir)
 	code := m.Run()
 	os.Exit(code)

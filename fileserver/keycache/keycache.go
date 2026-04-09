@@ -35,14 +35,15 @@ func SetKey(repoID, user string, key, iv []byte, version int) {
 }
 
 func GetKey(repoID, user string) *DecryptKey {
-	val, ok := keys.Load(cacheKey(repoID, user))
+	k := cacheKey(repoID, user)
+	val, ok := keys.Load(k)
 	if !ok {
 		return nil
 	}
 	dk := val.(*DecryptKey)
 
 	if time.Now().Unix() >= dk.ExpireTime {
-		keys.Delete(cacheKey(repoID, user))
+		keys.Delete(k)
 		return nil
 	}
 

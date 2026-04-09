@@ -38,18 +38,19 @@ func CreateToken(repoID, objID, op, user string, oneTime bool) string {
 }
 
 func QueryToken(token string) *AccessInfo {
-	val, ok := tokens.LoadAndDelete(token)
+	val, ok := tokens.Load(token)
 	if !ok {
 		return nil
 	}
 	info := val.(*AccessInfo)
 
 	if time.Now().Unix() >= info.ExpireTime {
+		tokens.Delete(token)
 		return nil
 	}
 
-	if !info.OneTime {
-		tokens.Store(token, info)
+	if info.OneTime {
+		tokens.Delete(token)
 	}
 
 	return info

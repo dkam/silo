@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/haiwen/seafile-server/fileserver/authmgr"
 	"github.com/haiwen/seafile-server/fileserver/middleware"
+	"github.com/haiwen/seafile-server/fileserver/option"
 	"github.com/haiwen/seafile-server/fileserver/repomgr"
 	"github.com/haiwen/seafile-server/fileserver/share"
 	"github.com/haiwen/seafile-server/fileserver/tokenstore"
@@ -101,22 +103,8 @@ type repoInfo struct {
 	Encrypted  bool   `json:"encrypted"`
 }
 
-func ListReposHandler(w http.ResponseWriter, r *http.Request) {
-	user := middleware.GetUserEmail(r)
-
-	// Get repo IDs owned by this user
-	rows, err := seafileDB.Query(
-		"SELECT o.repo_id, i.name, i.update_time, i.is_encrypted "+
-			"FROM RepoOwner o LEFT JOIN RepoInfo i ON o.repo_id = i.repo_id "+
-			"WHERE o.owner_id = ?", user)
-	if err != nil {
-		log.Errorf("Failed to query repos: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	repos := make([]repoInfo, 0)
+func scanRepos(rows *sql.Rows) []repoInfo {
+	var repos []repoInfo
 	for rows.Next() {
 		var repo repoInfo
 		var name, isEncrypted sql.NullString
@@ -129,26 +117,36 @@ func ListReposHandler(w http.ResponseWriter, r *http.Request) {
 		repo.Encrypted = isEncrypted.String == "1"
 		repos = append(repos, repo)
 	}
+	return repos
+}
 
-	// Also get repos shared to this user
-	sharedRows, err := seafileDB.Query(
+func ListReposHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+	ctx, cancel := context.WithTimeout(r.Context(), option.DBOpTimeout)
+	defer cancel()
+
+	rows, err := seafileDB.QueryContext(ctx,
+		"SELECT o.repo_id, i.name, i.update_time, i.is_encrypted "+
+			"FROM RepoOwner o LEFT JOIN RepoInfo i ON o.repo_id = i.repo_id "+
+			"WHERE o.owner_id = ?", user)
+	if err != nil {
+		log.Errorf("Failed to query repos: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	repos := scanRepos(rows)
+
+	sharedRows, err := seafileDB.QueryContext(ctx,
 		"SELECT s.repo_id, i.name, i.update_time, i.is_encrypted "+
 			"FROM SharedRepo s LEFT JOIN RepoInfo i ON s.repo_id = i.repo_id "+
 			"WHERE s.to_email = ?", user)
-	if err == nil {
+	if err != nil {
+		log.Errorf("Failed to query shared repos: %v", err)
+	} else {
 		defer sharedRows.Close()
-		for sharedRows.Next() {
-			var repo repoInfo
-			var name, isEncrypted sql.NullString
-			var updateTime sql.NullInt64
-			if err := sharedRows.Scan(&repo.ID, &name, &updateTime, &isEncrypted); err != nil {
-				continue
-			}
-			repo.Name = name.String
-			repo.UpdateTime = updateTime.Int64
-			repo.Encrypted = isEncrypted.String == "1"
-			repos = append(repos, repo)
-		}
+		repos = append(repos, scanRepos(sharedRows)...)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
