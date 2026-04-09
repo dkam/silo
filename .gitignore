@@ -96,3 +96,5 @@ tests/conf/PeerMgr
 /symbols
 __pycache__/
 .cache/
+fileserver/fileserver
+cmd/seafile-tui/seafile-tui
