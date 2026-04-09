@@ -8,6 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/haiwen/seafile-server/fileserver/authmgr"
+	"github.com/haiwen/seafile-server/fileserver/fsmgr"
 	"github.com/haiwen/seafile-server/fileserver/middleware"
 	"github.com/haiwen/seafile-server/fileserver/option"
 	"github.com/haiwen/seafile-server/fileserver/repomgr"
@@ -253,4 +254,62 @@ func DeleteRepoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+type dirEntry struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	ID       string `json:"id"`
+	Size     int64  `json:"size,omitempty"`
+	Mtime    int64  `json:"mtime"`
+	Modifier string `json:"modifier,omitempty"`
+}
+
+func ListDirHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+	vars := mux.Vars(r)
+	repoID := vars["repoid"]
+
+	repo := repomgr.Get(repoID)
+	if repo == nil {
+		http.Error(w, "Repo not found", http.StatusNotFound)
+		return
+	}
+
+	perm := share.CheckPerm(repoID, user)
+	if perm == "" {
+		http.Error(w, "Permission denied", http.StatusForbidden)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "/"
+	}
+
+	dir, err := fsmgr.GetSeafdirByPath(repo.StoreID, repo.RootID, path)
+	if err != nil {
+		log.Errorf("Failed to get directory %s in repo %s: %v", path, repoID, err)
+		http.Error(w, "Directory not found", http.StatusNotFound)
+		return
+	}
+
+	entries := make([]dirEntry, 0, len(dir.Entries))
+	for _, e := range dir.Entries {
+		entryType := "file"
+		if fsmgr.IsDir(e.Mode) {
+			entryType = "dir"
+		}
+		entries = append(entries, dirEntry{
+			Name:     e.Name,
+			Type:     entryType,
+			ID:       e.ID,
+			Size:     e.Size,
+			Mtime:    e.Mtime,
+			Modifier: e.Modifier,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(entries)
 }

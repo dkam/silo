@@ -98,6 +98,41 @@ func (c *APIClient) CreateRepo(name string) (*Repo, error) {
 	return &repo, nil
 }
 
+type DirEntry struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"` // "file" or "dir"
+	ID       string `json:"id"`
+	Size     int64  `json:"size,omitempty"`
+	Mtime    int64  `json:"mtime"`
+	Modifier string `json:"modifier,omitempty"`
+}
+
+func (c *APIClient) ListDir(repoID, path string) ([]DirEntry, error) {
+	if path == "" {
+		path = "/"
+	}
+	url := fmt.Sprintf("%s/api/v1/repos/%s/dir/?path=%s", c.BaseURL, repoID, path)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		msg, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to list dir: %s", string(msg))
+	}
+
+	var entries []DirEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v", err)
+	}
+	return entries, nil
+}
+
 func (c *APIClient) DeleteRepo(repoID string) error {
 	req, _ := http.NewRequest("DELETE", c.BaseURL+"/api/v1/repos/"+repoID, nil)
 	req.Header.Set("Authorization", "Bearer "+c.Token)

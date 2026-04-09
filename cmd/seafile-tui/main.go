@@ -17,6 +17,7 @@ const (
 	viewRepos    = "repos"
 	viewNewRepo  = "new_repo"
 	viewConfirm  = "confirm_delete"
+	viewBrowse   = "browse"
 )
 
 // Styles
@@ -37,6 +38,10 @@ type reposLoadedMsg struct {
 }
 type repoCreatedMsg struct{ err error }
 type repoDeletedMsg struct{ err error }
+type dirLoadedMsg struct {
+	entries []DirEntry
+	err     error
+}
 
 type model struct {
 	client *APIClient
@@ -54,6 +59,13 @@ type model struct {
 
 	// New repo
 	newRepoInput textinput.Model
+
+	// Browse
+	browseRepoID   string
+	browseRepoName string
+	browsePath     string
+	dirEntries     []DirEntry
+	browseCursor   int
 
 	width  int
 	height int
@@ -111,6 +123,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateNewRepo(msg)
 	case viewConfirm:
 		return m.updateConfirm(msg)
+	case viewBrowse:
+		return m.updateBrowse(msg)
 	}
 
 	return m, nil
@@ -213,6 +227,17 @@ func (m model) updateRepos(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			m.message = "Refreshing..."
 			return m, m.loadRepos
+		case "enter":
+			if len(m.repos) > 0 {
+				repo := m.repos[m.cursor]
+				m.browseRepoID = repo.ID
+				m.browseRepoName = repo.Name
+				m.browsePath = "/"
+				m.browseCursor = 0
+				m.view = viewBrowse
+				m.message = ""
+				return m, m.loadDir
+			}
 		}
 
 	case reposLoadedMsg:
@@ -361,6 +386,136 @@ func (m model) renderConfirm() string {
 	return b.String()
 }
 
+// --- Browse View ---
+
+func (m model) loadDir() tea.Msg {
+	entries, err := m.client.ListDir(m.browseRepoID, m.browsePath)
+	return dirLoadedMsg{entries: entries, err: err}
+}
+
+func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.browseCursor > 0 {
+				m.browseCursor--
+			}
+		case "down", "j":
+			if m.browseCursor < len(m.dirEntries)-1 {
+				m.browseCursor++
+			}
+		case "enter":
+			if m.browseCursor < len(m.dirEntries) {
+				entry := m.dirEntries[m.browseCursor]
+				if entry.Type == "dir" {
+					if m.browsePath == "/" {
+						m.browsePath = "/" + entry.Name
+					} else {
+						m.browsePath = m.browsePath + "/" + entry.Name
+					}
+					m.browseCursor = 0
+					m.message = ""
+					return m, m.loadDir
+				}
+			}
+		case "backspace", "h":
+			if m.browsePath != "/" {
+				// Go up one level
+				parts := strings.Split(m.browsePath, "/")
+				if len(parts) > 1 {
+					m.browsePath = strings.Join(parts[:len(parts)-1], "/")
+					if m.browsePath == "" {
+						m.browsePath = "/"
+					}
+				}
+				m.browseCursor = 0
+				m.message = ""
+				return m, m.loadDir
+			}
+		case "esc":
+			m.view = viewRepos
+			m.message = ""
+			return m, nil
+		}
+
+	case dirLoadedMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		m.dirEntries = msg.entries
+		m.message = ""
+		if m.browseCursor >= len(m.dirEntries) {
+			m.browseCursor = max(0, len(m.dirEntries)-1)
+		}
+	}
+
+	return m, nil
+}
+
+func formatSize(size int64) string {
+	switch {
+	case size >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(size)/float64(1<<30))
+	case size >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(size)/float64(1<<20))
+	case size >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(size)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", size)
+	}
+}
+
+func (m model) renderBrowse() string {
+	var b strings.Builder
+
+	// Breadcrumb
+	breadcrumb := m.browseRepoName + " " + m.browsePath
+	b.WriteString(titleStyle.Render(breadcrumb) + "\n\n")
+
+	if len(m.dirEntries) == 0 {
+		b.WriteString(dimStyle.Render("  (empty directory)") + "\n")
+	}
+
+	for i, entry := range m.dirEntries {
+		cursor := "  "
+		if i == m.browseCursor {
+			cursor = "> "
+		}
+
+		if entry.Type == "dir" {
+			name := entry.Name + "/"
+			if i == m.browseCursor {
+				name = selectedStyle.Render(name)
+			}
+			ts := ""
+			if entry.Mtime > 0 {
+				ts = dimStyle.Render("  " + time.Unix(entry.Mtime, 0).Format("2006-01-02 15:04"))
+			}
+			b.WriteString(fmt.Sprintf("%s%s%s\n", cursor, name, ts))
+		} else {
+			name := entry.Name
+			if i == m.browseCursor {
+				name = selectedStyle.Render(name)
+			}
+			size := dimStyle.Render(formatSize(entry.Size))
+			ts := ""
+			if entry.Mtime > 0 {
+				ts = dimStyle.Render("  " + time.Unix(entry.Mtime, 0).Format("2006-01-02 15:04"))
+			}
+			b.WriteString(fmt.Sprintf("%s%s  %s%s\n", cursor, name, size, ts))
+		}
+	}
+
+	b.WriteString("\n")
+	if m.message != "" {
+		b.WriteString(m.message + "\n")
+	}
+	b.WriteString(helpStyle.Render("j/k: navigate  enter: open dir  backspace: up  esc: back"))
+	return b.String()
+}
+
 // --- View dispatch ---
 
 func (m model) View() string {
@@ -373,6 +528,8 @@ func (m model) View() string {
 		return m.renderNewRepo()
 	case viewConfirm:
 		return m.renderConfirm()
+	case viewBrowse:
+		return m.renderBrowse()
 	}
 	return ""
 }
