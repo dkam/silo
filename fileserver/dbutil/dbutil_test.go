@@ -30,7 +30,7 @@ func TestInsertOrReplacePostgres(t *testing.T) {
 	DBEngine = "postgres"
 
 	got := InsertOrReplace("RepoHead", "repo_id, branch_name")
-	want := "INSERT INTO RepoHead (repo_id, branch_name) VALUES (?, ?) ON CONFLICT (repo_id) DO UPDATE SET branch_name=EXCLUDED.branch_name"
+	want := "INSERT INTO RepoHead (repo_id, branch_name) VALUES ($1, $2) ON CONFLICT (repo_id) DO UPDATE SET branch_name=EXCLUDED.branch_name"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -40,7 +40,7 @@ func TestInsertOrReplacePostgresSingleColumn(t *testing.T) {
 	DBEngine = "postgres"
 
 	got := InsertOrReplace("GarbageRepos", "repo_id")
-	want := "INSERT INTO GarbageRepos (repo_id) VALUES (?) ON CONFLICT (repo_id) DO NOTHING"
+	want := "INSERT INTO GarbageRepos (repo_id) VALUES ($1) ON CONFLICT (repo_id) DO NOTHING"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -70,7 +70,7 @@ func TestInsertOrIgnorePostgres(t *testing.T) {
 	DBEngine = "postgres"
 
 	got := InsertOrIgnore("GarbageRepos", "repo_id")
-	want := "INSERT INTO GarbageRepos (repo_id) VALUES (?) ON CONFLICT DO NOTHING"
+	want := "INSERT INTO GarbageRepos (repo_id) VALUES ($1) ON CONFLICT DO NOTHING"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -90,7 +90,7 @@ func TestInsertOrReplaceMultipleColumns(t *testing.T) {
 	DBEngine = "postgres"
 
 	got := InsertOrReplace("RepoOwner", "repo_id, owner_id")
-	want := "INSERT INTO RepoOwner (repo_id, owner_id) VALUES (?, ?) ON CONFLICT (repo_id) DO UPDATE SET owner_id=EXCLUDED.owner_id"
+	want := "INSERT INTO RepoOwner (repo_id, owner_id) VALUES ($1, $2) ON CONFLICT (repo_id) DO UPDATE SET owner_id=EXCLUDED.owner_id"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
