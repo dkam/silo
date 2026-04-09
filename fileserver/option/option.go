@@ -1,7 +1,10 @@
 package option
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -335,7 +338,14 @@ func loadCacheOptionFromEnv() {
 func LoadSeahubConfig() error {
 	JWTPrivateKey = os.Getenv("JWT_PRIVATE_KEY")
 	if JWTPrivateKey == "" {
-		return fmt.Errorf("failed to read JWT_PRIVATE_KEY")
+		// Auto-generate a key. Tokens won't survive server restarts,
+		// which is fine for a single-server deployment.
+		buf := make([]byte, 32)
+		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
+			return fmt.Errorf("failed to generate JWT key: %v", err)
+		}
+		JWTPrivateKey = hex.EncodeToString(buf)
+		log.Info("JWT_PRIVATE_KEY not set, generated ephemeral key")
 	}
 
 	siteRoot := os.Getenv("SITE_ROOT")
