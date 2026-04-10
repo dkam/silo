@@ -461,6 +461,7 @@ func newHTTPRouter() *mux.Router {
 	api2Router.HandleFunc("/account/info/", api.SeaDriveAccountInfoHandler).Methods("GET")
 	api2Router.HandleFunc("/server-info/", api.SeaDriveServerInfoHandler).Methods("GET")
 	api2Router.HandleFunc("/repos/", api.SeaDriveReposHandler).Methods("GET")
+	api2Router.HandleFunc("/repos/", api.SeaDriveCreateRepoHandler).Methods("POST")
 	api2Router.HandleFunc("/repos/{repoid}/download-info/", api.SeaDriveDownloadInfoHandler).Methods("GET")
 	api2Router.HandleFunc("/repos/{repoid}/repo-tokens/", api.SeaDriveRepoTokenHandler).Methods("POST")
 

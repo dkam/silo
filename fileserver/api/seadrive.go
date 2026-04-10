@@ -83,6 +83,45 @@ type seadriveRepo struct {
 	Root       string `json:"root"`
 }
 
+// SeaDriveCreateRepoHandler handles POST /api2/repos/
+// Creates a new library (repo) owned by the authenticated user. SeaDrive
+// sends a form-encoded body with the library name, matching Seahub's API.
+func SeaDriveCreateRepoHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+
+	// Accept both form-encoded (SeaDrive default) and JSON bodies.
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+	name := r.FormValue("name")
+	if name == "" {
+		http.Error(w, "Name is required", http.StatusBadRequest)
+		return
+	}
+
+	repoID, err := repomgr.CreateRepo(name, user)
+	if err != nil {
+		log.Errorf("Failed to create repo: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, seadriveRepo{
+		ID:         repoID,
+		Name:       name,
+		Owner:      user,
+		Permission: "rw",
+		Type:       "repo",
+		Encrypted:  false,
+		Size:       0,
+		MTime:      0,
+		HeadCommit: "",
+		Version:    1,
+		Root:       "",
+	})
+}
+
 // SeaDriveReposHandler handles GET /api2/repos/
 // Returns repos accessible to the authenticated user in Seahub's format.
 func SeaDriveReposHandler(w http.ResponseWriter, r *http.Request) {
