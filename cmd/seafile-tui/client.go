@@ -10,11 +10,24 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type APIClient struct {
 	BaseURL string
-	Token   string // JWT session token
+
+	// mu guards token/email/password. Bubble Tea runs tea.Cmd callbacks in
+	// separate goroutines, so concurrent requests can race on token refresh.
+	mu       sync.Mutex
+	token    string
+	email    string
+	password string
+}
+
+func (c *APIClient) getToken() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.token
 }
 
 type Repo struct {
@@ -37,34 +50,33 @@ func NewClient(baseURL string) *APIClient {
 	return &APIClient{BaseURL: baseURL}
 }
 
-// doRequest performs an authenticated HTTP request. If body is non-nil, it is
-// JSON-encoded as the request body. If result is non-nil, the response is
-// JSON-decoded into it.
+// doRequest performs an authenticated HTTP request, transparently re-logging
+// in and retrying once if the server returns 401.
 func (c *APIClient) doRequest(method, path string, body, result interface{}) error {
-	var bodyReader io.Reader
+	var bodyBytes []byte
 	if body != nil {
-		data, err := json.Marshal(body)
+		var err error
+		bodyBytes, err = json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("failed to encode request: %v", err)
 		}
-		bodyReader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequest(method, c.BaseURL+path, bodyReader)
+	tokenUsed := c.getToken()
+	resp, err := c.sendRequest(method, path, bodyBytes, tokenUsed)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
+		return err
 	}
 
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("connection failed: %v", err)
+	if resp.StatusCode == http.StatusUnauthorized && c.hasCreds() {
+		resp.Body.Close()
+		if err := c.reloginIfStale(tokenUsed); err != nil {
+			return fmt.Errorf("re-login failed: %v", err)
+		}
+		resp, err = c.sendRequest(method, path, bodyBytes, c.getToken())
+		if err != nil {
+			return err
+		}
 	}
 	defer resp.Body.Close()
 
@@ -81,17 +93,80 @@ func (c *APIClient) doRequest(method, path string, body, result interface{}) err
 	return nil
 }
 
-func (c *APIClient) Login(email, password string) error {
-	var result struct {
-		Token string `json:"token"`
+func (c *APIClient) sendRequest(method, path string, bodyBytes []byte, token string) (*http.Response, error) {
+	var bodyReader io.Reader
+	if bodyBytes != nil {
+		bodyReader = bytes.NewReader(bodyBytes)
 	}
-	err := c.doRequest("POST", "/api/v1/auth/login",
-		map[string]string{"email": email, "password": password}, &result)
+
+	req, err := http.NewRequest(method, c.BaseURL+path, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if bodyBytes != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("connection failed: %v", err)
+	}
+	return resp, nil
+}
+
+func (c *APIClient) hasCreds() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.email != "" && c.password != ""
+}
+
+// reloginIfStale refreshes the token only if it hasn't already been refreshed
+// since the caller observed `tokenUsed`. This collapses concurrent 401s from a
+// single expiry into a single login request.
+func (c *APIClient) reloginIfStale(tokenUsed string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.token != tokenUsed {
+		return nil
+	}
+	return c.reloginLocked()
+}
+
+// reloginLocked performs a login and updates c.token. Caller must hold c.mu.
+func (c *APIClient) reloginLocked() error {
+	bodyBytes, err := json.Marshal(map[string]string{"email": c.email, "password": c.password})
 	if err != nil {
 		return err
 	}
-	c.Token = result.Token
+	resp, err := c.sendRequest("POST", "/api/v1/auth/login", bodyBytes, "")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("%s: %s", resp.Status, string(msg))
+	}
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+	c.token = result.Token
 	return nil
+}
+
+func (c *APIClient) Login(email, password string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.email = email
+	c.password = password
+	return c.reloginLocked()
 }
 
 func (c *APIClient) ListRepos() ([]Repo, error) {
@@ -149,7 +224,7 @@ func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
 
 	// Don't follow redirects — we need to follow with auth-less request to /files/
 	client := &http.Client{

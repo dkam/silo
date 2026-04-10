@@ -251,7 +251,6 @@ func (m model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case loginDoneMsg:
-		m.autoPassword = "" // Clear credentials after use
 		if msg.err != nil {
 			m.message = errorStyle.Render(msg.err.Error())
 			return m, nil
