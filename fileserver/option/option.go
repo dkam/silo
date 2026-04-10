@@ -154,6 +154,18 @@ func LoadFileServerOptions(centralDir string) {
 		parseFileServerSection(section)
 	}
 
+	// Environment overrides for fileserver bind address. These take precedence
+	// over the ini config so deployments can change the listen address without
+	// editing config files.
+	if envHost := os.Getenv("SEAFILE_FILESERVER_HOST"); envHost != "" {
+		Host = envHost
+	}
+	if envPort := os.Getenv("SEAFILE_FILESERVER_PORT"); envPort != "" {
+		if port, err := strconv.ParseUint(envPort, 10, 32); err == nil {
+			Port = uint32(port)
+		}
+	}
+
 	if section, err := config.GetSection("quota"); err == nil {
 		if key, err := section.GetKey("default"); err == nil {
 			quotaStr := key.String()

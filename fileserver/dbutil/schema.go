@@ -122,6 +122,9 @@ CREATE TABLE IF NOT EXISTS LastGCID (id INTEGER PRIMARY KEY AUTOINCREMENT, repo_
 CREATE UNIQUE INDEX IF NOT EXISTS lastgcid_repoid_clientid_idx ON LastGCID (repo_id, client_id);
 
 CREATE TABLE IF NOT EXISTS SystemInfo (info_key VARCHAR(256), info_value VARCHAR(1024));
+
+CREATE TABLE IF NOT EXISTS ApiToken (token CHAR(40) PRIMARY KEY, email VARCHAR(255) NOT NULL, ctime BIGINT);
+CREATE INDEX IF NOT EXISTS apitoken_email_idx ON ApiToken (email);
 `
 
 // CreateCcnetTables creates all ccnet tables if they don't exist.

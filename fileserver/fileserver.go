@@ -18,6 +18,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"github.com/haiwen/seafile-server/fileserver/api"
+	"github.com/haiwen/seafile-server/fileserver/apitokenstore"
 	"github.com/haiwen/seafile-server/fileserver/authmgr"
 	"github.com/haiwen/seafile-server/fileserver/blockmgr"
 	"github.com/haiwen/seafile-server/fileserver/commitmgr"
@@ -45,12 +46,14 @@ var logFp *os.File
 var seafilePair, ccnetPair *dbutil.DBPair
 
 var logToStdout bool
+var debugLog bool
 
 func init() {
 	flag.StringVar(&centralDir, "F", "", "central config directory")
 	flag.StringVar(&dataDir, "d", "", "seafile data directory")
 	flag.StringVar(&logFile, "l", "", "log file path")
 	flag.StringVar(&pidFilePath, "P", "", "pid file path")
+	flag.BoolVar(&debugLog, "debug", false, "log every HTTP request (method, path, status, duration)")
 
 	env := os.Getenv("SEAFILE_LOG_TO_STDOUT")
 	if env == "true" {
@@ -290,6 +293,7 @@ func main() {
 	keycache.StartReaper()
 	authmgr.Init(ccnetPair.Read, ccnetPair.Write)
 	api.Init(seafilePair.Read, seafilePair.Write)
+	apitokenstore.Init(seafilePair.Read, seafilePair.Write)
 
 	// Create admin user from env vars if set
 	adminEmail := os.Getenv("SEAFILE_ADMIN_EMAIL")
@@ -321,7 +325,11 @@ func main() {
 
 	server := new(http.Server)
 	server.Addr = fmt.Sprintf("%s:%d", option.Host, option.Port)
-	server.Handler = router
+	var handler http.Handler = middleware.StripSeafhttpPrefix(router)
+	if debugLog {
+		handler = middleware.DebugLogger(handler)
+	}
+	server.Handler = handler
 
 	err = server.ListenAndServe()
 	if err != nil {
@@ -445,9 +453,15 @@ func newHTTPRouter() *mux.Router {
 	apiRouter.HandleFunc("/repos/{repoid}/sync-token", api.CreateRepoSyncTokenHandler).Methods("POST")
 
 	// SeaDrive compatibility routes (/api2/)
+	// These use Seahub/DRF-style "Authorization: Token <token>" auth, not Bearer JWT.
 	r.HandleFunc("/api2/auth-token/", api.SeaDriveAuthTokenHandler).Methods("POST")
 	api2Router := r.PathPrefix("/api2").Subrouter()
-	api2Router.Use(middleware.RequireAuth)
+	api2Router.Use(middleware.RequireAPIToken)
+	api2Router.HandleFunc("/auth/ping/", api.SeaDriveAuthPingHandler).Methods("GET")
+	api2Router.HandleFunc("/account/info/", api.SeaDriveAccountInfoHandler).Methods("GET")
+	api2Router.HandleFunc("/server-info/", api.SeaDriveServerInfoHandler).Methods("GET")
+	api2Router.HandleFunc("/repos/", api.SeaDriveReposHandler).Methods("GET")
+	api2Router.HandleFunc("/repos/{repoid}/download-info/", api.SeaDriveDownloadInfoHandler).Methods("GET")
 	api2Router.HandleFunc("/repos/{repoid}/repo-tokens/", api.SeaDriveRepoTokenHandler).Methods("POST")
 
 	if option.HasRedisOptions {
