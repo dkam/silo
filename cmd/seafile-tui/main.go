@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -54,6 +55,10 @@ type deleteFileDoneMsg struct{ err error }
 type downloadDoneMsg struct{ err error }
 type renameDoneMsg struct{ err error }
 type moveDoneMsg struct{ err error }
+type movePickerLoadedMsg struct {
+	dirs []DirEntry
+	err  error
+}
 
 type model struct {
 	client *APIClient
@@ -85,9 +90,14 @@ type model struct {
 	// Mkdir
 	mkdirInput textinput.Model
 
-	// Rename / Move
+	// Rename
 	renameInput textinput.Model
-	moveInput   textinput.Model
+
+	// Move (remote directory picker)
+	moveSrcPath      string
+	movePickerPath   string
+	movePickerDirs   []DirEntry
+	movePickerCursor int
 
 	// Pending download (for overwrite confirmation)
 	pendingDownloadRepoPath  string
@@ -99,6 +109,11 @@ type model struct {
 
 	width  int
 	height int
+}
+
+// entryPath builds a full repo path from the current browse path and an entry name.
+func (m model) entryPath(name string) string {
+	return path.Join(m.browsePath, name)
 }
 
 func initialModel(serverURL, autoEmail, autoPassword string) model {
@@ -128,10 +143,6 @@ func initialModel(serverURL, autoEmail, autoPassword string) model {
 	renameIn.Placeholder = "new name"
 	renameIn.CharLimit = 255
 
-	moveIn := textinput.New()
-	moveIn.Placeholder = "/destination/path"
-	moveIn.CharLimit = 1024
-
 	m := model{
 		client:        NewClient(serverURL),
 		view:          viewLogin,
@@ -141,7 +152,6 @@ func initialModel(serverURL, autoEmail, autoPassword string) model {
 		uploadInput:   upload,
 		mkdirInput:    mkdirIn,
 		renameInput:   renameIn,
-		moveInput:     moveIn,
 		autoEmail:     autoEmail,
 		autoPassword:  autoPassword,
 	}
@@ -241,6 +251,7 @@ func (m model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case loginDoneMsg:
+		m.autoPassword = "" // Clear credentials after use
 		if msg.err != nil {
 			m.message = errorStyle.Render(msg.err.Error())
 			return m, nil
@@ -489,22 +500,13 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.browseCursor < len(m.dirEntries) {
 				entry := m.dirEntries[m.browseCursor]
 				if entry.Type == "dir" {
-					if m.browsePath == "/" {
-						m.browsePath = "/" + entry.Name
-					} else {
-						m.browsePath = m.browsePath + "/" + entry.Name
-					}
+					m.browsePath = m.entryPath(entry.Name)
 					m.browseCursor = 0
 					m.message = ""
 					return m, m.loadDir
 				}
 				// File — download
-				var repoPath string
-				if m.browsePath == "/" {
-					repoPath = "/" + entry.Name
-				} else {
-					repoPath = m.browsePath + "/" + entry.Name
-				}
+				repoPath := m.entryPath(entry.Name)
 				localPath := entry.Name
 
 				// Check if local file exists
@@ -540,17 +542,16 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "v":
 			if m.browseCursor < len(m.dirEntries) {
 				entry := m.dirEntries[m.browseCursor]
-				var currentPath string
-				if m.browsePath == "/" {
-					currentPath = "/" + entry.Name
-				} else {
-					currentPath = m.browsePath + "/" + entry.Name
-				}
-				m.moveInput.SetValue(currentPath)
-				m.moveInput.Focus()
+				m.moveSrcPath = m.entryPath(entry.Name)
+				m.movePickerPath = "/"
+				m.movePickerCursor = 0
 				m.view = viewMove
 				m.message = ""
-				return m, textinput.Blink
+				repoID := m.browseRepoID
+				return m, func() tea.Msg {
+					entries, err := m.client.ListDir(repoID, "/")
+					return movePickerLoadedMsg{dirs: entries, err: err}
+				}
 			}
 		case "x":
 			if m.browseCursor < len(m.dirEntries) {
@@ -735,12 +736,7 @@ func (m model) updateMkdir(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.message = "Directory name is required"
 				return m, nil
 			}
-			var fullPath string
-			if m.browsePath == "/" {
-				fullPath = "/" + name
-			} else {
-				fullPath = m.browsePath + "/" + name
-			}
+			fullPath := m.entryPath(name)
 			repoID := m.browseRepoID
 			m.message = "Creating directory..."
 			return m, func() tea.Msg {
@@ -785,12 +781,7 @@ func (m model) updateConfirmDeleteFile(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "y", "Y":
 			entry := m.dirEntries[m.browseCursor]
-			var filePath string
-			if m.browsePath == "/" {
-				filePath = "/" + entry.Name
-			} else {
-				filePath = m.browsePath + "/" + entry.Name
-			}
+			filePath := m.entryPath(entry.Name)
 			repoID := m.browseRepoID
 			m.message = "Deleting..."
 			return m, func() tea.Msg {
@@ -844,12 +835,7 @@ func (m model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			entry := m.dirEntries[m.browseCursor]
-			var filePath string
-			if m.browsePath == "/" {
-				filePath = "/" + entry.Name
-			} else {
-				filePath = m.browsePath + "/" + entry.Name
-			}
+			filePath := m.entryPath(entry.Name)
 			repoID := m.browseRepoID
 			m.message = "Renaming..."
 			return m, func() tea.Msg {
@@ -886,33 +872,76 @@ func (m model) renderRename() string {
 	return b.String()
 }
 
-// --- Move View ---
+// --- Move View (remote directory picker) ---
+
+func (m model) loadMoveDirs() tea.Cmd {
+	repoID := m.browseRepoID
+	pickerPath := m.movePickerPath
+	return func() tea.Msg {
+		entries, err := m.client.ListDir(repoID, pickerPath)
+		return movePickerLoadedMsg{dirs: entries, err: err}
+	}
+}
 
 func (m model) updateMove(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		m.message = ""
 		switch msg.String() {
-		case "esc":
-			m.view = viewBrowse
-			return m, nil
+		case "up", "k":
+			if m.movePickerCursor > 0 {
+				m.movePickerCursor--
+			}
+		case "down", "j":
+			if m.movePickerCursor < len(m.movePickerDirs)-1 {
+				m.movePickerCursor++
+			}
 		case "enter":
-			dst := m.moveInput.Value()
-			if dst == "" {
-				m.message = "Destination path is required"
+			if m.movePickerCursor < len(m.movePickerDirs) {
+				// Navigate into selected directory
+				dir := m.movePickerDirs[m.movePickerCursor]
+				m.movePickerPath = path.Join(m.movePickerPath, dir.Name)
+				m.movePickerCursor = 0
+				return m, m.loadMoveDirs()
+			}
+		case "backspace", "h":
+			if m.movePickerPath != "/" {
+				m.movePickerPath = path.Dir(m.movePickerPath)
+				m.movePickerCursor = 0
+				return m, m.loadMoveDirs()
+			}
+		case " ":
+			// Space = select current directory as destination
+			srcName := path.Base(m.moveSrcPath)
+			dst := path.Join(m.movePickerPath, srcName)
+			if dst == m.moveSrcPath {
+				m.message = errorStyle.Render("Cannot move to same location")
 				return m, nil
 			}
-			entry := m.dirEntries[m.browseCursor]
-			var srcPath string
-			if m.browsePath == "/" {
-				srcPath = "/" + entry.Name
-			} else {
-				srcPath = m.browsePath + "/" + entry.Name
-			}
 			repoID := m.browseRepoID
+			src := m.moveSrcPath
+			m.view = viewBrowse
 			m.message = "Moving..."
 			return m, func() tea.Msg {
-				err := m.client.MoveFile(repoID, srcPath, dst)
+				err := m.client.MoveFile(repoID, src, dst)
 				return moveDoneMsg{err: err}
+			}
+		case "esc":
+			m.view = viewBrowse
+			m.message = ""
+			return m, nil
+		}
+
+	case movePickerLoadedMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		// Filter to directories only
+		m.movePickerDirs = nil
+		for _, e := range msg.dirs {
+			if e.Type == "dir" {
+				m.movePickerDirs = append(m.movePickerDirs, e)
 			}
 		}
 
@@ -926,21 +955,37 @@ func (m model) updateMove(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadDir
 	}
 
-	var cmd tea.Cmd
-	m.moveInput, cmd = m.moveInput.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m model) renderMove() string {
 	var b strings.Builder
-	name := m.dirEntries[m.browseCursor].Name
-	b.WriteString(titleStyle.Render(fmt.Sprintf("Move \"%s\"", name)) + "\n\n")
-	b.WriteString("Destination path:\n")
-	b.WriteString(m.moveInput.View() + "\n\n")
-	if m.message != "" {
-		b.WriteString(m.message + "\n\n")
+
+	srcName := path.Base(m.moveSrcPath)
+	b.WriteString(titleStyle.Render(fmt.Sprintf("Move \"%s\"", srcName)) + "\n")
+	b.WriteString(dimStyle.Render("Select destination: "+m.movePickerPath) + "\n\n")
+
+	if len(m.movePickerDirs) == 0 {
+		b.WriteString(dimStyle.Render("  (no subdirectories)") + "\n")
 	}
-	b.WriteString(helpStyle.Render("enter: move  esc: cancel"))
+
+	for i, dir := range m.movePickerDirs {
+		cursor := "  "
+		if i == m.movePickerCursor {
+			cursor = "> "
+		}
+		name := dir.Name + "/"
+		if i == m.movePickerCursor {
+			name = selectedStyle.Render(name)
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+	}
+
+	b.WriteString("\n")
+	if m.message != "" {
+		b.WriteString(m.message + "\n")
+	}
+	b.WriteString(helpStyle.Render("j/k: navigate  enter: open dir  space: move here  backspace: up  esc: cancel"))
 	return b.String()
 }
 

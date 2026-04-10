@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,8 +56,8 @@ func mkdirHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentDir := filepath.Dir(path)
-	dirName := filepath.Base(path)
+	parentDir := path.Dir(path)
+	dirName := path.Base(path)
 
 	mode := uint32(syscall.S_IFDIR | 0644)
 	dent := fsmgr.NewDirent(fsmgr.EmptySha1, dirName, mode, time.Now().Unix(), "", 0)
@@ -96,8 +97,8 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentDir := filepath.Dir(path)
-	filename := filepath.Base(path)
+	parentDir := path.Dir(path)
+	filename := path.Base(path)
 
 	newRootID, err := DelFileFromTree(repo.StoreID, head.RootID, parentDir, filename)
 	if err != nil {
@@ -150,7 +151,7 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := filepath.Base(path)
+	filename := path.Base(path)
 	token := tokenstore.CreateToken(repoID, fileID, "download", user, true)
 	redirectURL := fmt.Sprintf("/files/%s/%s", token, url.PathEscape(filename))
 	http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -180,8 +181,8 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentDir := filepath.Dir(path)
-	oldName := filepath.Base(path)
+	parentDir := path.Dir(path)
+	oldName := path.Base(path)
 
 	// Delete old entry
 	rootAfterDel, err := DelFileFromTree(repo.StoreID, head.RootID, parentDir, oldName)
@@ -219,8 +220,14 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 
 	srcPath, _ := url.QueryUnescape(r.URL.Query().Get("src"))
 	dstPath, _ := url.QueryUnescape(r.URL.Query().Get("dst"))
+	srcPath = strings.TrimRight(srcPath, "/")
+	dstPath = strings.TrimRight(dstPath, "/")
 	if srcPath == "" || dstPath == "" {
 		http.Error(w, "src and dst are required", http.StatusBadRequest)
+		return
+	}
+	if srcPath == dstPath {
+		http.Error(w, "src and dst are the same", http.StatusBadRequest)
 		return
 	}
 
@@ -236,10 +243,10 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcDir := filepath.Dir(srcPath)
-	srcName := filepath.Base(srcPath)
-	dstDir := filepath.Dir(dstPath)
-	dstName := filepath.Base(dstPath)
+	srcDir := path.Dir(srcPath)
+	srcName := path.Base(srcPath)
+	dstDir := path.Dir(dstPath)
+	dstName := path.Base(dstPath)
 
 	// Phase 1: Add to destination
 	newDent := fsmgr.NewDirent(srcEntry.ID, dstName, srcEntry.Mode, time.Now().Unix(), srcEntry.Modifier, srcEntry.Size)

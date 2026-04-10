@@ -444,6 +444,12 @@ func newHTTPRouter() *mux.Router {
 	apiRouter.HandleFunc("/repos/{repoid}/move", moveHandler).Methods("POST")
 	apiRouter.HandleFunc("/repos/{repoid}/sync-token", api.CreateRepoSyncTokenHandler).Methods("POST")
 
+	// SeaDrive compatibility routes (/api2/)
+	r.HandleFunc("/api2/auth-token/", api.SeaDriveAuthTokenHandler).Methods("POST")
+	api2Router := r.PathPrefix("/api2").Subrouter()
+	api2Router.Use(middleware.RequireAuth)
+	api2Router.HandleFunc("/repos/{repoid}/repo-tokens/", api.SeaDriveRepoTokenHandler).Methods("POST")
+
 	if option.HasRedisOptions {
 		r.Use(metrics.MetricMiddleware)
 	}
