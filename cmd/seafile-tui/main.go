@@ -425,6 +425,7 @@ func (m model) loadDir() tea.Msg {
 func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		m.message = "" // Clear status on any keypress
 		switch msg.String() {
 		case "up", "k":
 			if m.browseCursor > 0 {
