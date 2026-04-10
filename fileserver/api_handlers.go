@@ -44,7 +44,7 @@ func mkdirHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	repoID := vars["repoid"]
 
-	path := r.URL.Query().Get("path")
+	path, _ := url.QueryUnescape(r.URL.Query().Get("path"))
 	if path == "" {
 		http.Error(w, "path is required", http.StatusBadRequest)
 		return
@@ -85,7 +85,7 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	repoID := vars["repoid"]
 
-	path := r.URL.Query().Get("path")
+	path, _ := url.QueryUnescape(r.URL.Query().Get("path"))
 	if path == "" {
 		http.Error(w, "path is required", http.StatusBadRequest)
 		return
@@ -122,7 +122,7 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	repoID := vars["repoid"]
 
-	path := r.URL.Query().Get("path")
+	path, _ := url.QueryUnescape(r.URL.Query().Get("path"))
 	if path == "" {
 		http.Error(w, "path is required", http.StatusBadRequest)
 		return
@@ -154,4 +154,118 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	token := tokenstore.CreateToken(repoID, fileID, "download", user, true)
 	redirectURL := fmt.Sprintf("/files/%s/%s", token, url.PathEscape(filename))
 	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func renameHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+	vars := mux.Vars(r)
+	repoID := vars["repoid"]
+
+	path, _ := url.QueryUnescape(r.URL.Query().Get("path"))
+	newName, _ := url.QueryUnescape(r.URL.Query().Get("newname"))
+	if path == "" || newName == "" {
+		http.Error(w, "path and newname are required", http.StatusBadRequest)
+		return
+	}
+
+	repo, head, ok := loadRepoAndCommit(w, repoID, user)
+	if !ok {
+		return
+	}
+
+	// Get the existing entry
+	oldEntry, err := fsmgr.GetDirentByPath(repo.StoreID, head.RootID, path)
+	if err != nil || oldEntry == nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	parentDir := filepath.Dir(path)
+	oldName := filepath.Base(path)
+
+	// Delete old entry
+	rootAfterDel, err := DelFileFromTree(repo.StoreID, head.RootID, parentDir, oldName)
+	if err != nil {
+		log.Errorf("Failed to delete old entry: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Add new entry with same ID but new name
+	newDent := fsmgr.NewDirent(oldEntry.ID, newName, oldEntry.Mode, time.Now().Unix(), oldEntry.Modifier, oldEntry.Size)
+	var names []string
+	newRootID, err := DoPostMultiFiles(repo, rootAfterDel, parentDir, []*fsmgr.SeafDirent{newDent}, user, false, &names)
+	if err != nil {
+		log.Errorf("Failed to add renamed entry: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	desc := fmt.Sprintf("Renamed \"%s\" to \"%s\"", oldName, newName)
+	_, err = GenNewCommit(repo, head, newRootID, user, desc, false, "", false)
+	if err != nil {
+		log.Errorf("Failed to commit rename: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func moveHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+	vars := mux.Vars(r)
+	repoID := vars["repoid"]
+
+	srcPath, _ := url.QueryUnescape(r.URL.Query().Get("src"))
+	dstPath, _ := url.QueryUnescape(r.URL.Query().Get("dst"))
+	if srcPath == "" || dstPath == "" {
+		http.Error(w, "src and dst are required", http.StatusBadRequest)
+		return
+	}
+
+	repo, head, ok := loadRepoAndCommit(w, repoID, user)
+	if !ok {
+		return
+	}
+
+	// Get the existing entry
+	srcEntry, err := fsmgr.GetDirentByPath(repo.StoreID, head.RootID, srcPath)
+	if err != nil || srcEntry == nil {
+		http.Error(w, "Source not found", http.StatusNotFound)
+		return
+	}
+
+	srcDir := filepath.Dir(srcPath)
+	srcName := filepath.Base(srcPath)
+	dstDir := filepath.Dir(dstPath)
+	dstName := filepath.Base(dstPath)
+
+	// Phase 1: Add to destination
+	newDent := fsmgr.NewDirent(srcEntry.ID, dstName, srcEntry.Mode, time.Now().Unix(), srcEntry.Modifier, srcEntry.Size)
+	var names []string
+	rootAfterAdd, err := DoPostMultiFiles(repo, head.RootID, dstDir, []*fsmgr.SeafDirent{newDent}, user, true, &names)
+	if err != nil {
+		log.Errorf("Failed to add to destination: %v", err)
+		http.Error(w, "Failed to move: destination error", http.StatusInternalServerError)
+		return
+	}
+
+	// Phase 2: Remove from source
+	newRootID, err := DelFileFromTree(repo.StoreID, rootAfterAdd, srcDir, srcName)
+	if err != nil {
+		log.Errorf("Failed to remove from source: %v", err)
+		http.Error(w, "Failed to move: source error", http.StatusInternalServerError)
+		return
+	}
+
+	desc := fmt.Sprintf("Moved \"%s\"", srcName)
+	_, err = GenNewCommit(repo, head, newRootID, user, desc, false, "", false)
+	if err != nil {
+		log.Errorf("Failed to commit move: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

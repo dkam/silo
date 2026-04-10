@@ -127,6 +127,16 @@ func (c *APIClient) Mkdir(repoID, path string) error {
 	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/mkdir?path=%s", repoID, url.QueryEscape(path)), nil, nil)
 }
 
+func (c *APIClient) RenameFile(repoID, path, newName string) error {
+	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/rename?path=%s&newname=%s",
+		repoID, url.QueryEscape(path), url.QueryEscape(newName)), nil, nil)
+}
+
+func (c *APIClient) MoveFile(repoID, src, dst string) error {
+	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/move?src=%s&dst=%s",
+		repoID, url.QueryEscape(src), url.QueryEscape(dst)), nil, nil)
+}
+
 func (c *APIClient) DeleteFile(repoID, path string) error {
 	return c.doRequest("DELETE", fmt.Sprintf("/api/v1/repos/%s/file?path=%s", repoID, url.QueryEscape(path)), nil, nil)
 }

@@ -22,6 +22,8 @@ const (
 	viewMkdir            = "mkdir"
 	viewConfirmDelete    = "confirm_delete_file"
 	viewConfirmOverwrite = "confirm_overwrite"
+	viewRename           = "rename"
+	viewMove             = "move"
 )
 
 // Styles
@@ -50,6 +52,8 @@ type uploadDoneMsg struct{ err error }
 type mkdirDoneMsg struct{ err error }
 type deleteFileDoneMsg struct{ err error }
 type downloadDoneMsg struct{ err error }
+type renameDoneMsg struct{ err error }
+type moveDoneMsg struct{ err error }
 
 type model struct {
 	client *APIClient
@@ -80,6 +84,10 @@ type model struct {
 
 	// Mkdir
 	mkdirInput textinput.Model
+
+	// Rename / Move
+	renameInput textinput.Model
+	moveInput   textinput.Model
 
 	// Pending download (for overwrite confirmation)
 	pendingDownloadRepoPath  string
@@ -116,6 +124,14 @@ func initialModel(serverURL, autoEmail, autoPassword string) model {
 	mkdirIn.Placeholder = "directory name"
 	mkdirIn.CharLimit = 255
 
+	renameIn := textinput.New()
+	renameIn.Placeholder = "new name"
+	renameIn.CharLimit = 255
+
+	moveIn := textinput.New()
+	moveIn.Placeholder = "/destination/path"
+	moveIn.CharLimit = 1024
+
 	m := model{
 		client:        NewClient(serverURL),
 		view:          viewLogin,
@@ -124,6 +140,8 @@ func initialModel(serverURL, autoEmail, autoPassword string) model {
 		newRepoInput:  newRepo,
 		uploadInput:   upload,
 		mkdirInput:    mkdirIn,
+		renameInput:   renameIn,
+		moveInput:     moveIn,
 		autoEmail:     autoEmail,
 		autoPassword:  autoPassword,
 	}
@@ -182,6 +200,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConfirmDeleteFile(msg)
 	case viewConfirmOverwrite:
 		return m.updateConfirmOverwrite(msg)
+	case viewRename:
+		return m.updateRename(msg)
+	case viewMove:
+		return m.updateMove(msg)
 	}
 
 	return m, nil
@@ -507,6 +529,29 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mkdirInput.Focus()
 			m.message = ""
 			return m, textinput.Blink
+		case "r":
+			if m.browseCursor < len(m.dirEntries) {
+				m.renameInput.SetValue(m.dirEntries[m.browseCursor].Name)
+				m.renameInput.Focus()
+				m.view = viewRename
+				m.message = ""
+				return m, textinput.Blink
+			}
+		case "v":
+			if m.browseCursor < len(m.dirEntries) {
+				entry := m.dirEntries[m.browseCursor]
+				var currentPath string
+				if m.browsePath == "/" {
+					currentPath = "/" + entry.Name
+				} else {
+					currentPath = m.browsePath + "/" + entry.Name
+				}
+				m.moveInput.SetValue(currentPath)
+				m.moveInput.Focus()
+				m.view = viewMove
+				m.message = ""
+				return m, textinput.Blink
+			}
 		case "x":
 			if m.browseCursor < len(m.dirEntries) {
 				m.view = viewConfirmDelete
@@ -619,7 +664,7 @@ func (m model) renderBrowse() string {
 	if m.message != "" {
 		b.WriteString(m.message + "\n")
 	}
-	b.WriteString(helpStyle.Render("j/k: navigate  enter: open/download  u: upload  m: mkdir  x: delete  backspace: up  esc: back"))
+	b.WriteString(helpStyle.Render("j/k: navigate  enter: open/download  u: upload  m: mkdir  r: rename  v: move  x: delete  q: quit"))
 	return b.String()
 }
 
@@ -783,6 +828,122 @@ func (m model) renderConfirmDeleteFile() string {
 	return b.String()
 }
 
+// --- Rename View ---
+
+func (m model) updateRename(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.view = viewBrowse
+			return m, nil
+		case "enter":
+			newName := m.renameInput.Value()
+			if newName == "" {
+				m.message = "Name is required"
+				return m, nil
+			}
+			entry := m.dirEntries[m.browseCursor]
+			var filePath string
+			if m.browsePath == "/" {
+				filePath = "/" + entry.Name
+			} else {
+				filePath = m.browsePath + "/" + entry.Name
+			}
+			repoID := m.browseRepoID
+			m.message = "Renaming..."
+			return m, func() tea.Msg {
+				err := m.client.RenameFile(repoID, filePath, newName)
+				return renameDoneMsg{err: err}
+			}
+		}
+
+	case renameDoneMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		m.view = viewBrowse
+		m.message = successStyle.Render("Renamed")
+		return m, m.loadDir
+	}
+
+	var cmd tea.Cmd
+	m.renameInput, cmd = m.renameInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) renderRename() string {
+	var b strings.Builder
+	name := m.dirEntries[m.browseCursor].Name
+	b.WriteString(titleStyle.Render(fmt.Sprintf("Rename \"%s\"", name)) + "\n\n")
+	b.WriteString("New name:\n")
+	b.WriteString(m.renameInput.View() + "\n\n")
+	if m.message != "" {
+		b.WriteString(m.message + "\n\n")
+	}
+	b.WriteString(helpStyle.Render("enter: rename  esc: cancel"))
+	return b.String()
+}
+
+// --- Move View ---
+
+func (m model) updateMove(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.view = viewBrowse
+			return m, nil
+		case "enter":
+			dst := m.moveInput.Value()
+			if dst == "" {
+				m.message = "Destination path is required"
+				return m, nil
+			}
+			entry := m.dirEntries[m.browseCursor]
+			var srcPath string
+			if m.browsePath == "/" {
+				srcPath = "/" + entry.Name
+			} else {
+				srcPath = m.browsePath + "/" + entry.Name
+			}
+			repoID := m.browseRepoID
+			m.message = "Moving..."
+			return m, func() tea.Msg {
+				err := m.client.MoveFile(repoID, srcPath, dst)
+				return moveDoneMsg{err: err}
+			}
+		}
+
+	case moveDoneMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		m.view = viewBrowse
+		m.message = successStyle.Render("Moved")
+		return m, m.loadDir
+	}
+
+	var cmd tea.Cmd
+	m.moveInput, cmd = m.moveInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) renderMove() string {
+	var b strings.Builder
+	name := m.dirEntries[m.browseCursor].Name
+	b.WriteString(titleStyle.Render(fmt.Sprintf("Move \"%s\"", name)) + "\n\n")
+	b.WriteString("Destination path:\n")
+	b.WriteString(m.moveInput.View() + "\n\n")
+	if m.message != "" {
+		b.WriteString(m.message + "\n\n")
+	}
+	b.WriteString(helpStyle.Render("enter: move  esc: cancel"))
+	return b.String()
+}
+
 // --- Confirm Overwrite View ---
 
 func (m model) updateConfirmOverwrite(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -838,6 +999,10 @@ func (m model) View() string {
 		return m.renderConfirmDeleteFile()
 	case viewConfirmOverwrite:
 		return m.renderConfirmOverwrite()
+	case viewRename:
+		return m.renderRename()
+	case viewMove:
+		return m.renderMove()
 	}
 	return ""
 }
