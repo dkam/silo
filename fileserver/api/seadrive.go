@@ -12,8 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// SeaDriveAuthTokenHandler handles POST /api2/auth-token/
-// This provides SeaDrive client compatibility for authentication.
+// SeaDriveAuthTokenHandler handles POST /api2/auth-token/.
+// SeaDrive expects a 40-char hex API token (Seahub/DRF format), not a JWT.
 func SeaDriveAuthTokenHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
@@ -35,7 +35,6 @@ func SeaDriveAuthTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SeaDrive expects a 40-char hex API token (Seahub/DRF format), not a JWT.
 	token, err := apitokenstore.Create(email)
 	if err != nil {
 		log.Errorf("Failed to generate API token: %v", err)
@@ -46,21 +45,16 @@ func SeaDriveAuthTokenHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
-// SeaDriveAuthPingHandler handles GET /api2/auth/ping/
-// Returns "pong" to confirm token is valid. Matches Seahub behavior.
+// SeaDriveAuthPingHandler handles GET /api2/auth/ping/.
 func SeaDriveAuthPingHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`"pong"`))
+	writeJSON(w, http.StatusOK, "pong")
 }
 
-// serverInfoResponse matches Seahub's /api2/server-info/ response shape.
 type serverInfoResponse struct {
 	Version  string   `json:"version"`
 	Features []string `json:"features"`
 }
 
-// SeaDriveServerInfoHandler handles GET /api2/server-info/
 func SeaDriveServerInfoHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, serverInfoResponse{
 		Version:  "11.0.0",
@@ -83,13 +77,11 @@ type seadriveRepo struct {
 	Root       string `json:"root"`
 }
 
-// SeaDriveCreateRepoHandler handles POST /api2/repos/
-// Creates a new library (repo) owned by the authenticated user. SeaDrive
-// sends a form-encoded body with the library name, matching Seahub's API.
+// SeaDriveCreateRepoHandler handles POST /api2/repos/. SeaDrive sends a
+// form-encoded body with the library name.
 func SeaDriveCreateRepoHandler(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUserEmail(r)
 
-	// Accept both form-encoded (SeaDrive default) and JSON bodies.
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
@@ -113,17 +105,12 @@ func SeaDriveCreateRepoHandler(w http.ResponseWriter, r *http.Request) {
 		Owner:      user,
 		Permission: "rw",
 		Type:       "repo",
-		Encrypted:  false,
-		Size:       0,
-		MTime:      0,
-		HeadCommit: "",
 		Version:    1,
-		Root:       "",
 	})
 }
 
-// SeaDriveReposHandler handles GET /api2/repos/
-// Returns repos accessible to the authenticated user in Seahub's format.
+// SeaDriveReposHandler handles GET /api2/repos/. Returns repos accessible to
+// the authenticated user in Seahub's format.
 func SeaDriveReposHandler(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUserEmail(r)
 
@@ -153,12 +140,9 @@ func SeaDriveReposHandler(w http.ResponseWriter, r *http.Request) {
 				Owner:      owner,
 				Permission: perm,
 				Type:       typ,
-				Encrypted:  false,
-				Size:       0,
 				MTime:      repo.MTime,
 				HeadCommit: repo.HeadCommitID,
 				Version:    repo.Version,
-				Root:       "",
 			})
 		}
 	}
@@ -172,12 +156,16 @@ func SeaDriveReposHandler(w http.ResponseWriter, r *http.Request) {
 	add(owned, "repo", user)
 
 	shared, err := share.ListShareRepos(user, "to_email")
-	if err == nil {
+	if err != nil {
+		log.Warnf("Failed to list shared repos for %s: %v", user, err)
+	} else {
 		add(shared, "srepo", "")
 	}
 
 	group, err := share.GetGroupReposByUser(user, -1)
-	if err == nil {
+	if err != nil {
+		log.Warnf("Failed to list group repos for %s: %v", user, err)
+	} else {
 		add(group, "grepo", "")
 	}
 
@@ -187,7 +175,6 @@ func SeaDriveReposHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// accountInfoResponse matches Seahub's /api2/account/info/ response shape.
 type accountInfoResponse struct {
 	Email       string `json:"email"`
 	Name        string `json:"name"`
@@ -196,16 +183,12 @@ type accountInfoResponse struct {
 	Institution string `json:"institution"`
 }
 
-// SeaDriveAccountInfoHandler handles GET /api2/account/info/
-// Returns the authenticated user's profile.
 func SeaDriveAccountInfoHandler(w http.ResponseWriter, r *http.Request) {
 	email := middleware.GetUserEmail(r)
 	writeJSON(w, http.StatusOK, accountInfoResponse{
-		Email:       email,
-		Name:        email,
-		Usage:       0,
-		Total:       -1, // unlimited
-		Institution: "",
+		Email: email,
+		Name:  email,
+		Total: -1, // unlimited
 	})
 }
 
@@ -228,16 +211,13 @@ type downloadInfoResponse struct {
 	FileServerURL string `json:"file_server_url"`
 }
 
-// SeaDriveDownloadInfoHandler handles GET /api2/repos/{repoid}/download-info/
-// Returns the sync token + repo metadata + file server URL so SeaDrive can
-// start syncing the library.
+// SeaDriveDownloadInfoHandler returns the sync token + repo metadata + file
+// server URL so SeaDrive can start syncing the library.
 func SeaDriveDownloadInfoHandler(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUserEmail(r)
-	vars := mux.Vars(r)
-	repoID := vars["repoid"]
+	repoID := mux.Vars(r)["repoid"]
 
-	perm := share.CheckPerm(repoID, user)
-	if perm == "" {
+	if share.CheckPerm(repoID, user) == "" {
 		http.Error(w, "Permission denied", http.StatusForbidden)
 		return
 	}
@@ -255,8 +235,8 @@ func SeaDriveDownloadInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build file server URL from the request so it works regardless of
-	// what host/port SeaDrive connected to.
+	// Build file server URL from the inbound request so it works regardless
+	// of what host/port SeaDrive connected to.
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
@@ -264,9 +244,6 @@ func SeaDriveDownloadInfoHandler(w http.ResponseWriter, r *http.Request) {
 	fileServerURL := scheme + "://" + r.Host
 
 	writeJSON(w, http.StatusOK, downloadInfoResponse{
-		RelayID:       "default_relay_id",
-		RelayAddr:     "default_relay_addr",
-		RelayPort:     "default_relay_port",
 		Token:         token,
 		RepoID:        repo.ID,
 		RepoName:      repo.Name,
@@ -280,27 +257,4 @@ func SeaDriveDownloadInfoHandler(w http.ResponseWriter, r *http.Request) {
 		HeadCommitID:  repo.HeadCommitID,
 		FileServerURL: fileServerURL,
 	})
-}
-
-// SeaDriveRepoTokenHandler handles POST /api2/repos/{repoid}/repo-tokens/
-// This provides SeaDrive client compatibility for obtaining repo sync tokens.
-func SeaDriveRepoTokenHandler(w http.ResponseWriter, r *http.Request) {
-	user := middleware.GetUserEmail(r)
-	vars := mux.Vars(r)
-	repoID := vars["repoid"]
-
-	perm := share.CheckPerm(repoID, user)
-	if perm == "" {
-		http.Error(w, "Permission denied", http.StatusForbidden)
-		return
-	}
-
-	token, err := repomgr.GenerateRepoToken(repoID, user)
-	if err != nil {
-		log.Errorf("Failed to generate repo token: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, syncTokenResponse{Token: token})
 }

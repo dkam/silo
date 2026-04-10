@@ -7,23 +7,25 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"time"
 )
+
+// ErrNotFound is returned by Lookup when the token is absent from the store.
+// Callers should treat this distinctly from DB/connectivity errors so an
+// outage doesn't masquerade as "invalid token".
+var ErrNotFound = errors.New("api token not found")
 
 var (
 	readDB  *sql.DB
 	writeDB *sql.DB
 )
 
-// Init wires up the read/write DB handles. Must be called at startup before
-// any Create/Lookup/Delete calls.
 func Init(read, write *sql.DB) {
 	readDB = read
 	writeDB = write
 }
 
-// Create generates a new 40-char hex API token for the given email, stores it
-// in the ApiToken table, and returns it.
 func Create(email string) (string, error) {
 	b := make([]byte, 20)
 	if _, err := rand.Read(b); err != nil {
@@ -41,19 +43,21 @@ func Create(email string) (string, error) {
 	return token, nil
 }
 
-// Lookup returns the email associated with a token, or "" if not found.
-func Lookup(token string) string {
+func Lookup(token string) (string, error) {
 	var email string
 	err := readDB.QueryRow(
 		"SELECT email FROM ApiToken WHERE token = ?", token,
 	).Scan(&email)
-	if err != nil {
-		return ""
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
 	}
-	return email
+	if err != nil {
+		return "", err
+	}
+	return email, nil
 }
 
-// Delete removes a token from the store.
-func Delete(token string) {
-	_, _ = writeDB.Exec("DELETE FROM ApiToken WHERE token = ?", token)
+func Delete(token string) error {
+	_, err := writeDB.Exec("DELETE FROM ApiToken WHERE token = ?", token)
+	return err
 }
