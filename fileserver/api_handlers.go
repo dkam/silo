@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
+	upath "path"
 	"strings"
 	"syscall"
 	"time"
@@ -56,8 +56,8 @@ func mkdirHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentDir := path.Dir(path)
-	dirName := path.Base(path)
+	parentDir := upath.Dir(path)
+	dirName := upath.Base(path)
 
 	mode := uint32(syscall.S_IFDIR | 0644)
 	dent := fsmgr.NewDirent(fsmgr.EmptySha1, dirName, mode, time.Now().Unix(), "", 0)
@@ -97,8 +97,8 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentDir := path.Dir(path)
-	filename := path.Base(path)
+	parentDir := upath.Dir(path)
+	filename := upath.Base(path)
 
 	newRootID, err := DelFileFromTree(repo.StoreID, head.RootID, parentDir, filename)
 	if err != nil {
@@ -151,7 +151,7 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := path.Base(path)
+	filename := upath.Base(path)
 	token := tokenstore.CreateToken(repoID, fileID, "download", user, true)
 	redirectURL := fmt.Sprintf("/files/%s/%s", token, url.PathEscape(filename))
 	http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -181,8 +181,8 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentDir := path.Dir(path)
-	oldName := path.Base(path)
+	parentDir := upath.Dir(path)
+	oldName := upath.Base(path)
 
 	// Delete old entry
 	rootAfterDel, err := DelFileFromTree(repo.StoreID, head.RootID, parentDir, oldName)
@@ -243,10 +243,10 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	srcDir := path.Dir(srcPath)
-	srcName := path.Base(srcPath)
-	dstDir := path.Dir(dstPath)
-	dstName := path.Base(dstPath)
+	srcDir := upath.Dir(srcPath)
+	srcName := upath.Base(srcPath)
+	dstDir := upath.Dir(dstPath)
+	dstName := upath.Base(dstPath)
 
 	// Phase 1: Add to destination
 	newDent := fsmgr.NewDirent(srcEntry.ID, dstName, srcEntry.Mode, time.Now().Unix(), srcEntry.Modifier, srcEntry.Size)
