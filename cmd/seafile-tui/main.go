@@ -85,11 +85,15 @@ type model struct {
 	pendingDownloadRepoPath  string
 	pendingDownloadLocalPath string
 
+	// Auto-login from env
+	autoEmail    string
+	autoPassword string
+
 	width  int
 	height int
 }
 
-func initialModel(serverURL string) model {
+func initialModel(serverURL, autoEmail, autoPassword string) model {
 	email := textinput.New()
 	email.Placeholder = "email@example.com"
 	email.Focus()
@@ -112,7 +116,7 @@ func initialModel(serverURL string) model {
 	mkdirIn.Placeholder = "directory name"
 	mkdirIn.CharLimit = 255
 
-	return model{
+	m := model{
 		client:        NewClient(serverURL),
 		view:          viewLogin,
 		emailInput:    email,
@@ -120,10 +124,25 @@ func initialModel(serverURL string) model {
 		newRepoInput:  newRepo,
 		uploadInput:   upload,
 		mkdirInput:    mkdirIn,
+		autoEmail:     autoEmail,
+		autoPassword:  autoPassword,
 	}
+
+	if autoEmail != "" {
+		m.emailInput.SetValue(autoEmail)
+	}
+
+	return m
 }
 
 func (m model) Init() tea.Cmd {
+	if m.autoEmail != "" && m.autoPassword != "" {
+		m.message = "Logging in..."
+		return func() tea.Msg {
+			err := m.client.Login(m.autoEmail, m.autoPassword)
+			return loginDoneMsg{err: err}
+		}
+	}
 	return textinput.Blink
 }
 
@@ -824,12 +843,18 @@ func (m model) View() string {
 }
 
 func main() {
-	serverURL := "http://localhost:8082"
+	serverURL := os.Getenv("SEAFILE_URL")
+	if serverURL == "" {
+		serverURL = "http://localhost:8082"
+	}
 	if len(os.Args) > 1 {
 		serverURL = os.Args[1]
 	}
 
-	p := tea.NewProgram(initialModel(serverURL), tea.WithAltScreen())
+	autoEmail := os.Getenv("SEAFILE_EMAIL")
+	autoPassword := os.Getenv("SEAFILE_PASSWORD")
+
+	p := tea.NewProgram(initialModel(serverURL, autoEmail, autoPassword), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
