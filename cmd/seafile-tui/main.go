@@ -18,6 +18,7 @@ const (
 	viewNewRepo  = "new_repo"
 	viewConfirm  = "confirm_delete"
 	viewBrowse   = "browse"
+	viewUpload   = "upload"
 )
 
 // Styles
@@ -42,6 +43,7 @@ type dirLoadedMsg struct {
 	entries []DirEntry
 	err     error
 }
+type uploadDoneMsg struct{ err error }
 
 type model struct {
 	client *APIClient
@@ -67,6 +69,9 @@ type model struct {
 	dirEntries     []DirEntry
 	browseCursor   int
 
+	// Upload
+	uploadInput textinput.Model
+
 	width  int
 	height int
 }
@@ -86,12 +91,17 @@ func initialModel(serverURL string) model {
 	newRepo.Placeholder = "Library name"
 	newRepo.CharLimit = 255
 
+	upload := textinput.New()
+	upload.Placeholder = "/path/to/local/file"
+	upload.CharLimit = 1024
+
 	return model{
 		client:        NewClient(serverURL),
 		view:          viewLogin,
 		emailInput:    email,
 		passwordInput: password,
 		newRepoInput:  newRepo,
+		uploadInput:   upload,
 	}
 }
 
@@ -125,6 +135,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConfirm(msg)
 	case viewBrowse:
 		return m.updateBrowse(msg)
+	case viewUpload:
+		return m.updateUpload(msg)
 	}
 
 	return m, nil
@@ -437,6 +449,12 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.view = viewRepos
 			m.message = ""
 			return m, nil
+		case "u":
+			m.view = viewUpload
+			m.uploadInput.SetValue("")
+			m.uploadInput.Focus()
+			m.message = ""
+			return m, textinput.Blink
 		}
 
 	case dirLoadedMsg:
@@ -512,7 +530,59 @@ func (m model) renderBrowse() string {
 	if m.message != "" {
 		b.WriteString(m.message + "\n")
 	}
-	b.WriteString(helpStyle.Render("j/k: navigate  enter: open dir  backspace: up  esc: back"))
+	b.WriteString(helpStyle.Render("j/k: navigate  enter: open dir  u: upload  backspace: up  esc: back"))
+	return b.String()
+}
+
+// --- Upload View ---
+
+func (m model) updateUpload(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.view = viewBrowse
+			return m, nil
+		case "enter":
+			localPath := m.uploadInput.Value()
+			if localPath == "" {
+				m.message = "File path is required"
+				return m, nil
+			}
+			m.message = "Uploading..."
+			repoID := m.browseRepoID
+			parentDir := m.browsePath
+			return m, func() tea.Msg {
+				err := m.client.UploadFile(repoID, parentDir, localPath)
+				return uploadDoneMsg{err: err}
+			}
+		}
+
+	case uploadDoneMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		m.view = viewBrowse
+		m.message = successStyle.Render("File uploaded")
+		return m, m.loadDir
+	}
+
+	var cmd tea.Cmd
+	m.uploadInput, cmd = m.uploadInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) renderUpload() string {
+	var b strings.Builder
+	breadcrumb := m.browseRepoName + " " + m.browsePath
+	b.WriteString(titleStyle.Render("Upload to "+breadcrumb) + "\n\n")
+	b.WriteString("Local file path:\n")
+	b.WriteString(m.uploadInput.View() + "\n\n")
+	if m.message != "" {
+		b.WriteString(m.message + "\n\n")
+	}
+	b.WriteString(helpStyle.Render("enter: upload  esc: cancel"))
 	return b.String()
 }
 
@@ -530,6 +600,8 @@ func (m model) View() string {
 		return m.renderConfirm()
 	case viewBrowse:
 		return m.renderBrowse()
+	case viewUpload:
+		return m.renderUpload()
 	}
 	return ""
 }

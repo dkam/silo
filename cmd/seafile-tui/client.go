@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 )
 
 type APIClient struct {
@@ -118,4 +121,69 @@ func (c *APIClient) ListDir(repoID, path string) ([]DirEntry, error) {
 
 func (c *APIClient) DeleteRepo(repoID string) error {
 	return c.doRequest("DELETE", "/api/v1/repos/"+repoID, nil, nil)
+}
+
+// UploadFile uploads a local file to a repo directory.
+// It creates an access token, then POSTs a multipart form to /upload-api/.
+func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {
+	// Step 1: Create access token with op=upload
+	objID, _ := json.Marshal(map[string]string{"parent_dir": parentDir})
+	var tokenResp struct {
+		Token string `json:"token"`
+	}
+	err := c.doRequest("POST", "/api/v1/access-tokens", map[string]interface{}{
+		"repo_id": repoID,
+		"obj_id":  string(objID),
+		"op":      "upload",
+	}, &tokenResp)
+	if err != nil {
+		return fmt.Errorf("failed to get upload token: %v", err)
+	}
+
+	// Step 2: Build multipart form
+	file, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	if err := writer.WriteField("parent_dir", parentDir); err != nil {
+		return fmt.Errorf("failed to write parent_dir field: %v", err)
+	}
+	if err := writer.WriteField("ret-json", "1"); err != nil {
+		return fmt.Errorf("failed to write ret-json field: %v", err)
+	}
+
+	part, err := writer.CreateFormFile("file", filepath.Base(localPath))
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %v", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return fmt.Errorf("failed to copy file content: %v", err)
+	}
+	writer.Close()
+
+	// Step 3: POST to /upload-api/{token}
+	uploadURL := fmt.Sprintf("%s/upload-api/%s", c.BaseURL, tokenResp.Token)
+	req, err := http.NewRequest("POST", uploadURL, &buf)
+	if err != nil {
+		return fmt.Errorf("failed to create upload request: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("upload failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed: %s: %s", resp.Status, string(msg))
+	}
+
+	return nil
 }

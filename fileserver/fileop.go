@@ -2138,7 +2138,7 @@ func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID
 	var row *sql.Row
 	var sqlStr string
 	if checkGC {
-		sqlStr = "SELECT gc_id FROM GCID WHERE repo_id = ? FOR UPDATE"
+		sqlStr = "SELECT gc_id FROM GCID WHERE repo_id = ?"
 		if originRepoID == "" {
 			row = trans.QueryRowContext(ctx, sqlStr, repoID)
 		} else {
@@ -2161,7 +2161,7 @@ func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID
 
 	var commitID string
 	name := "master"
-	sqlStr = "SELECT commit_id FROM Branch WHERE name = ? AND repo_id = ? FOR UPDATE"
+	sqlStr = "SELECT commit_id FROM Branch WHERE name = ? AND repo_id = ?"
 
 	row = trans.QueryRowContext(ctx, sqlStr, name, repoID)
 	if err := row.Scan(&commitID); err != nil {
@@ -2620,7 +2620,7 @@ type chunkingResult struct {
 func createChunkPool(ctx context.Context, n int, chunkJobs chan chunkingData, res chan chunkingResult) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Errorf("panic: %v\n%s", err, debug.Stack())
+			log.Errorf("createChunkPool panic: %v\n%s", err, debug.Stack())
 		}
 	}()
 	var wg sync.WaitGroup
@@ -2635,7 +2635,7 @@ func createChunkPool(ctx context.Context, n int, chunkJobs chan chunkingData, re
 func chunkingWorker(ctx context.Context, wg *sync.WaitGroup, chunkJobs chan chunkingData, res chan chunkingResult) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Errorf("panic: %v\n%s", err, debug.Stack())
+			log.Errorf("chunkingWorker panic: %v\n%s", err, debug.Stack())
 		}
 	}()
 	for job := range chunkJobs {
@@ -2651,6 +2651,9 @@ func chunkingWorker(ctx context.Context, wg *sync.WaitGroup, chunkJobs chan chun
 
 		job := job
 		blkID, err := chunkFile(job)
+		if err != nil {
+		} else {
+		}
 		idx := job.offset / int64(option.FixedBlockSize)
 		result := chunkingResult{idx, blkID, err}
 		res <- result

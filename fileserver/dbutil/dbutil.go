@@ -146,7 +146,7 @@ func OpenSQLite(path string) (*DBPair, error) {
 		}
 	}
 
-	readDSN := fmt.Sprintf("file:%s?mode=ro&_pragma=journal_mode%%3DWAL&_pragma=busy_timeout%%3D5000&_pragma=synchronous%%3DNORMAL&_pragma=foreign_keys%%3DON", path)
+	readDSN := fmt.Sprintf("file:%s?_pragma=journal_mode%%3DWAL&_pragma=busy_timeout%%3D5000&_pragma=synchronous%%3DNORMAL&_pragma=foreign_keys%%3DON", path)
 	readDB, err := sql.Open("sqlite", readDSN)
 	if err != nil {
 		writeDB.Close()
