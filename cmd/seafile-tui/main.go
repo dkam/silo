@@ -19,8 +19,9 @@ const (
 	viewConfirm  = "confirm_delete"
 	viewBrowse        = "browse"
 	viewUpload        = "upload"
-	viewMkdir         = "mkdir"
-	viewConfirmDelete = "confirm_delete_file"
+	viewMkdir            = "mkdir"
+	viewConfirmDelete    = "confirm_delete_file"
+	viewConfirmOverwrite = "confirm_overwrite"
 )
 
 // Styles
@@ -79,6 +80,10 @@ type model struct {
 
 	// Mkdir
 	mkdirInput textinput.Model
+
+	// Pending download (for overwrite confirmation)
+	pendingDownloadRepoPath  string
+	pendingDownloadLocalPath string
 
 	width  int
 	height int
@@ -154,6 +159,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateMkdir(msg)
 	case viewConfirmDelete:
 		return m.updateConfirmDeleteFile(msg)
+	case viewConfirmOverwrite:
+		return m.updateConfirmOverwrite(msg)
 	}
 
 	return m, nil
@@ -449,7 +456,6 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.loadDir
 				}
 				// File — download
-				repoID := m.browseRepoID
 				var repoPath string
 				if m.browsePath == "/" {
 					repoPath = "/" + entry.Name
@@ -457,7 +463,18 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 					repoPath = m.browsePath + "/" + entry.Name
 				}
 				localPath := entry.Name
+
+				// Check if local file exists
+				if _, err := os.Stat(localPath); err == nil {
+					m.pendingDownloadRepoPath = repoPath
+					m.pendingDownloadLocalPath = localPath
+					m.view = viewConfirmOverwrite
+					m.message = ""
+					return m, nil
+				}
+
 				m.message = "Downloading..."
+				repoID := m.browseRepoID
 				return m, func() tea.Msg {
 					err := m.client.DownloadFile(repoID, repoPath, localPath)
 					return downloadDoneMsg{err: err}
@@ -745,6 +762,39 @@ func (m model) renderConfirmDeleteFile() string {
 	return b.String()
 }
 
+// --- Confirm Overwrite View ---
+
+func (m model) updateConfirmOverwrite(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "y", "Y":
+			repoID := m.browseRepoID
+			repoPath := m.pendingDownloadRepoPath
+			localPath := m.pendingDownloadLocalPath
+			m.view = viewBrowse
+			m.message = "Downloading..."
+			return m, func() tea.Msg {
+				err := m.client.DownloadFile(repoID, repoPath, localPath)
+				return downloadDoneMsg{err: err}
+			}
+		case "n", "N", "esc":
+			m.view = viewBrowse
+			m.message = ""
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m model) renderConfirmOverwrite() string {
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("File exists") + "\n\n")
+	b.WriteString(fmt.Sprintf("Overwrite local file %q?\n\n", m.pendingDownloadLocalPath))
+	b.WriteString(helpStyle.Render("y: yes  n: no"))
+	return b.String()
+}
+
 // --- View dispatch ---
 
 func (m model) View() string {
@@ -765,6 +815,8 @@ func (m model) View() string {
 		return m.renderMkdir()
 	case viewConfirmDelete:
 		return m.renderConfirmDeleteFile()
+	case viewConfirmOverwrite:
+		return m.renderConfirmOverwrite()
 	}
 	return ""
 }
