@@ -437,6 +437,9 @@ func newHTTPRouter() *mux.Router {
 	apiRouter.HandleFunc("/repos", api.CreateRepoHandler).Methods("POST")
 	apiRouter.HandleFunc("/repos/{repoid}", api.DeleteRepoHandler).Methods("DELETE")
 	apiRouter.HandleFunc("/repos/{repoid}/dir/", api.ListDirHandler).Methods("GET")
+	apiRouter.HandleFunc("/repos/{repoid}/mkdir", mkdirHandler).Methods("POST")
+	apiRouter.HandleFunc("/repos/{repoid}/file", deleteFileHandler).Methods("DELETE")
+	apiRouter.HandleFunc("/repos/{repoid}/download", downloadFileHandler).Methods("GET")
 	apiRouter.HandleFunc("/repos/{repoid}/sync-token", api.CreateRepoSyncTokenHandler).Methods("POST")
 
 	if option.HasRedisOptions {

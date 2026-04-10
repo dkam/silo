@@ -17,8 +17,10 @@ const (
 	viewRepos    = "repos"
 	viewNewRepo  = "new_repo"
 	viewConfirm  = "confirm_delete"
-	viewBrowse   = "browse"
-	viewUpload   = "upload"
+	viewBrowse        = "browse"
+	viewUpload        = "upload"
+	viewMkdir         = "mkdir"
+	viewConfirmDelete = "confirm_delete_file"
 )
 
 // Styles
@@ -44,6 +46,9 @@ type dirLoadedMsg struct {
 	err     error
 }
 type uploadDoneMsg struct{ err error }
+type mkdirDoneMsg struct{ err error }
+type deleteFileDoneMsg struct{ err error }
+type downloadDoneMsg struct{ err error }
 
 type model struct {
 	client *APIClient
@@ -72,6 +77,9 @@ type model struct {
 	// Upload
 	uploadInput textinput.Model
 
+	// Mkdir
+	mkdirInput textinput.Model
+
 	width  int
 	height int
 }
@@ -95,6 +103,10 @@ func initialModel(serverURL string) model {
 	upload.Placeholder = "/path/to/local/file"
 	upload.CharLimit = 1024
 
+	mkdirIn := textinput.New()
+	mkdirIn.Placeholder = "directory name"
+	mkdirIn.CharLimit = 255
+
 	return model{
 		client:        NewClient(serverURL),
 		view:          viewLogin,
@@ -102,6 +114,7 @@ func initialModel(serverURL string) model {
 		passwordInput: password,
 		newRepoInput:  newRepo,
 		uploadInput:   upload,
+		mkdirInput:    mkdirIn,
 	}
 }
 
@@ -137,6 +150,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateBrowse(msg)
 	case viewUpload:
 		return m.updateUpload(msg)
+	case viewMkdir:
+		return m.updateMkdir(msg)
+	case viewConfirmDelete:
+		return m.updateConfirmDeleteFile(msg)
 	}
 
 	return m, nil
@@ -430,6 +447,31 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.message = ""
 					return m, m.loadDir
 				}
+				// File — download
+				repoID := m.browseRepoID
+				var repoPath string
+				if m.browsePath == "/" {
+					repoPath = "/" + entry.Name
+				} else {
+					repoPath = m.browsePath + "/" + entry.Name
+				}
+				localPath := entry.Name
+				m.message = "Downloading..."
+				return m, func() tea.Msg {
+					err := m.client.DownloadFile(repoID, repoPath, localPath)
+					return downloadDoneMsg{err: err}
+				}
+			}
+		case "m":
+			m.view = viewMkdir
+			m.mkdirInput.SetValue("")
+			m.mkdirInput.Focus()
+			m.message = ""
+			return m, textinput.Blink
+		case "x":
+			if m.browseCursor < len(m.dirEntries) {
+				m.view = viewConfirmDelete
+				m.message = ""
 			}
 		case "backspace", "h":
 			if m.browsePath != "/" {
@@ -456,6 +498,14 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.message = ""
 			return m, textinput.Blink
 		}
+
+	case downloadDoneMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+		} else {
+			m.message = successStyle.Render("Downloaded to current directory")
+		}
+		return m, nil
 
 	case dirLoadedMsg:
 		if msg.err != nil {
@@ -530,7 +580,7 @@ func (m model) renderBrowse() string {
 	if m.message != "" {
 		b.WriteString(m.message + "\n")
 	}
-	b.WriteString(helpStyle.Render("j/k: navigate  enter: open dir  u: upload  backspace: up  esc: back"))
+	b.WriteString(helpStyle.Render("j/k: navigate  enter: open/download  u: upload  m: mkdir  x: delete  backspace: up  esc: back"))
 	return b.String()
 }
 
@@ -586,6 +636,114 @@ func (m model) renderUpload() string {
 	return b.String()
 }
 
+// --- Mkdir View ---
+
+func (m model) updateMkdir(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.view = viewBrowse
+			return m, nil
+		case "enter":
+			name := m.mkdirInput.Value()
+			if name == "" {
+				m.message = "Directory name is required"
+				return m, nil
+			}
+			var fullPath string
+			if m.browsePath == "/" {
+				fullPath = "/" + name
+			} else {
+				fullPath = m.browsePath + "/" + name
+			}
+			repoID := m.browseRepoID
+			m.message = "Creating directory..."
+			return m, func() tea.Msg {
+				err := m.client.Mkdir(repoID, fullPath)
+				return mkdirDoneMsg{err: err}
+			}
+		}
+
+	case mkdirDoneMsg:
+		if msg.err != nil {
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		m.view = viewBrowse
+		m.message = successStyle.Render("Directory created")
+		return m, m.loadDir
+	}
+
+	var cmd tea.Cmd
+	m.mkdirInput, cmd = m.mkdirInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) renderMkdir() string {
+	var b strings.Builder
+	breadcrumb := m.browseRepoName + " " + m.browsePath
+	b.WriteString(titleStyle.Render("Create directory in "+breadcrumb) + "\n\n")
+	b.WriteString("Directory name:\n")
+	b.WriteString(m.mkdirInput.View() + "\n\n")
+	if m.message != "" {
+		b.WriteString(m.message + "\n\n")
+	}
+	b.WriteString(helpStyle.Render("enter: create  esc: cancel"))
+	return b.String()
+}
+
+// --- Confirm Delete File View ---
+
+func (m model) updateConfirmDeleteFile(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "y", "Y":
+			entry := m.dirEntries[m.browseCursor]
+			var filePath string
+			if m.browsePath == "/" {
+				filePath = "/" + entry.Name
+			} else {
+				filePath = m.browsePath + "/" + entry.Name
+			}
+			repoID := m.browseRepoID
+			m.message = "Deleting..."
+			return m, func() tea.Msg {
+				err := m.client.DeleteFile(repoID, filePath)
+				return deleteFileDoneMsg{err: err}
+			}
+		case "n", "N", "esc":
+			m.view = viewBrowse
+			return m, nil
+		}
+
+	case deleteFileDoneMsg:
+		if msg.err != nil {
+			m.view = viewBrowse
+			m.message = errorStyle.Render(msg.err.Error())
+			return m, nil
+		}
+		m.view = viewBrowse
+		m.message = successStyle.Render("Deleted")
+		return m, m.loadDir
+	}
+
+	return m, nil
+}
+
+func (m model) renderConfirmDeleteFile() string {
+	var b strings.Builder
+	name := "(unknown)"
+	if m.browseCursor < len(m.dirEntries) {
+		name = m.dirEntries[m.browseCursor].Name
+	}
+	b.WriteString(titleStyle.Render("Delete") + "\n\n")
+	b.WriteString(fmt.Sprintf("Are you sure you want to delete %q?\n\n", name))
+	b.WriteString(helpStyle.Render("y: yes  n: no"))
+	return b.String()
+}
+
 // --- View dispatch ---
 
 func (m model) View() string {
@@ -602,6 +760,10 @@ func (m model) View() string {
 		return m.renderBrowse()
 	case viewUpload:
 		return m.renderUpload()
+	case viewMkdir:
+		return m.renderMkdir()
+	case viewConfirmDelete:
+		return m.renderConfirmDeleteFile()
 	}
 	return ""
 }

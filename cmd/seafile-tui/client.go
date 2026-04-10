@@ -123,6 +123,77 @@ func (c *APIClient) DeleteRepo(repoID string) error {
 	return c.doRequest("DELETE", "/api/v1/repos/"+repoID, nil, nil)
 }
 
+func (c *APIClient) Mkdir(repoID, path string) error {
+	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/mkdir?path=%s", repoID, url.QueryEscape(path)), nil, nil)
+}
+
+func (c *APIClient) DeleteFile(repoID, path string) error {
+	return c.doRequest("DELETE", fmt.Sprintf("/api/v1/repos/%s/file?path=%s", repoID, url.QueryEscape(path)), nil, nil)
+}
+
+func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
+	escapedPath := url.QueryEscape(repoPath)
+	downloadURL := fmt.Sprintf("%s/api/v1/repos/%s/download?path=%s", c.BaseURL, repoID, escapedPath)
+
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	// Don't follow redirects — we need to follow with auth-less request to /files/
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusFound {
+		// Follow the redirect to /files/{token}/filename
+		loc := resp.Header.Get("Location")
+		if loc == "" {
+			return fmt.Errorf("redirect with no location")
+		}
+		// Build absolute URL if relative
+		if loc[0] == '/' {
+			loc = c.BaseURL + loc
+		}
+		fileResp, err := http.Get(loc)
+		if err != nil {
+			return fmt.Errorf("download failed: %v", err)
+		}
+		defer fileResp.Body.Close()
+
+		if fileResp.StatusCode >= 400 {
+			msg, _ := io.ReadAll(fileResp.Body)
+			return fmt.Errorf("download failed: %s", string(msg))
+		}
+
+		out, err := os.Create(localPath)
+		if err != nil {
+			return fmt.Errorf("failed to create local file: %v", err)
+		}
+		defer out.Close()
+
+		if _, err := io.Copy(out, fileResp.Body); err != nil {
+			return fmt.Errorf("failed to write file: %v", err)
+		}
+		return nil
+	}
+
+	if resp.StatusCode >= 400 {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("download failed: %s: %s", resp.Status, string(msg))
+	}
+
+	return fmt.Errorf("unexpected response: %d", resp.StatusCode)
+}
+
 // UploadFile uploads a local file to a repo directory.
 // It creates an access token, then POSTs a multipart form to /upload-api/.
 func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {

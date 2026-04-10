@@ -1472,14 +1472,14 @@ func mkdirWithParents(repoID, parentDir, newDirPath, user string) error {
 	dent := fsmgr.NewDirent(dirID, filepath.Base(absPath), uint32(mode), mtime, "", 0)
 
 	var names []string
-	rootID, _ = doPostMultiFiles(repo, newRootID, filepath.Dir(absPath), []*fsmgr.SeafDirent{dent}, user, false, &names)
+	rootID, _ = DoPostMultiFiles(repo, newRootID, filepath.Dir(absPath), []*fsmgr.SeafDirent{dent}, user, false, &names)
 	if rootID == "" {
 		err := fmt.Errorf("failed to put dir")
 		return err
 	}
 
 	buf := fmt.Sprintf("Added directory \"%s\"", relativeDirCan)
-	_, err = genNewCommit(repo, headCommit, rootID, user, buf, true, "", false)
+	_, err = GenNewCommit(repo, headCommit, rootID, user, buf, true, "", false)
 	if err != nil {
 		err := fmt.Errorf("failed to generate new commit: %v", err)
 		return err
@@ -1890,7 +1890,7 @@ func postFilesAndGenCommit(fileNames []string, repoID string, user, canonPath st
 	}
 
 retry:
-	rootID, err := doPostMultiFiles(repo, headCommit.RootID, canonPath, dents, user, replace, &names)
+	rootID, err := DoPostMultiFiles(repo, headCommit.RootID, canonPath, dents, user, replace, &names)
 	if err != nil {
 		err := fmt.Errorf("failed to post files to %s in repo %s", canonPath, repo.ID)
 		return "", err
@@ -1903,7 +1903,7 @@ retry:
 		buf = fmt.Sprintf("Added \"%s\".", fileNames[0])
 	}
 
-	_, err = genNewCommit(repo, headCommit, rootID, user, buf, handleConncurrentUpdate, lastGCID, true)
+	_, err = GenNewCommit(repo, headCommit, rootID, user, buf, handleConncurrentUpdate, lastGCID, true)
 	if err != nil {
 		if err != ErrConflict {
 			err := fmt.Errorf("failed to generate new commit: %w", err)
@@ -1970,7 +1970,8 @@ var (
 	ErrGCConflict = errors.New("GC Conflict")
 )
 
-func genNewCommit(repo *repomgr.Repo, base *commitmgr.Commit, newRoot, user, desc string, handleConncurrentUpdate bool, lastGCID string, checkGC bool) (string, error) {
+// GenNewCommit creates a new commit with the given root and updates the branch.
+func GenNewCommit(repo *repomgr.Repo, base *commitmgr.Commit, newRoot, user, desc string, handleConncurrentUpdate bool, lastGCID string, checkGC bool) (string, error) {
 	var retryCnt int
 	repoID := repo.ID
 	commit := commitmgr.NewCommit(repoID, base.CommitID, newRoot, user, desc)
@@ -2261,7 +2262,8 @@ func notifRepoUpdate(repoID string, commitID string) error {
 	return nil
 }
 
-func doPostMultiFiles(repo *repomgr.Repo, rootID, parentDir string, dents []*fsmgr.SeafDirent, user string, replace bool, names *[]string) (string, error) {
+// DoPostMultiFiles inserts entries into a directory tree and returns the new root ID.
+func DoPostMultiFiles(repo *repomgr.Repo, rootID, parentDir string, dents []*fsmgr.SeafDirent, user string, replace bool, names *[]string) (string, error) {
 	if parentDir[0] == '/' {
 		parentDir = parentDir[1:]
 	}
@@ -2273,6 +2275,85 @@ func doPostMultiFiles(repo *repomgr.Repo, rootID, parentDir string, dents []*fsm
 	}
 
 	return id, nil
+}
+
+// delFileFromTree removes an entry from a directory tree and returns the new root ID.
+// parentPath is the directory containing the entry, filename is the entry to remove.
+// DelFileFromTree removes an entry from a directory tree and returns the new root ID.
+func DelFileFromTree(storeID, rootID, parentPath, filename string) (string, error) {
+	if parentPath != "" && parentPath[0] == '/' {
+		parentPath = parentPath[1:]
+	}
+	return delFileRecursive(storeID, rootID, parentPath, filename)
+}
+
+func delFileRecursive(storeID, dirID, toPath, filename string) (string, error) {
+	olddir, err := fsmgr.GetSeafdir(storeID, dirID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get dir %s: %v", dirID, err)
+	}
+
+	if toPath == "" {
+		// At target directory — remove the entry
+		var newEntries []*fsmgr.SeafDirent
+		found := false
+		for _, e := range olddir.Entries {
+			if e.Name == filename {
+				found = true
+				continue
+			}
+			newEntries = append(newEntries, e)
+		}
+		if !found {
+			return "", fmt.Errorf("file %s not found", filename)
+		}
+
+		newdir, err := fsmgr.NewSeafdir(1, newEntries)
+		if err != nil {
+			return "", fmt.Errorf("failed to create new dir: %v", err)
+		}
+		if err := fsmgr.SaveSeafdir(storeID, newdir); err != nil {
+			return "", fmt.Errorf("failed to save dir: %v", err)
+		}
+		return newdir.DirID, nil
+	}
+
+	// Not at target — walk down the path
+	slash := strings.Index(toPath, "/")
+	var firstName, remain string
+	if slash < 0 {
+		firstName = toPath
+		remain = ""
+	} else {
+		firstName = toPath[:slash]
+		remain = toPath[slash+1:]
+	}
+
+	entries := olddir.Entries
+	var newID string
+	for i, e := range entries {
+		if e.Name == firstName && fsmgr.IsDir(e.Mode) {
+			newID, err = delFileRecursive(storeID, e.ID, remain, filename)
+			if err != nil {
+				return "", err
+			}
+			entries[i] = fsmgr.NewDirent(newID, e.Name, e.Mode, time.Now().Unix(), "", 0)
+			break
+		}
+	}
+
+	if newID == "" {
+		return "", fmt.Errorf("directory %s not found in path", firstName)
+	}
+
+	newdir, err := fsmgr.NewSeafdir(1, entries)
+	if err != nil {
+		return "", fmt.Errorf("failed to create new dir: %v", err)
+	}
+	if err := fsmgr.SaveSeafdir(storeID, newdir); err != nil {
+		return "", fmt.Errorf("failed to save dir: %v", err)
+	}
+	return newdir.DirID, nil
 }
 
 func postMultiFilesRecursive(repo *repomgr.Repo, dirID, toPath, user string, dents []*fsmgr.SeafDirent, replace bool, names *[]string) (string, error) {
@@ -2887,7 +2968,7 @@ func updateDir(repoID, dirPath, newDirID, user, headID string) (string, error) {
 		if commitDesc == "" {
 			commitDesc = "Auto merge by system"
 		}
-		newCommitID, err := genNewCommit(repo, headCommit, newDirID, user, commitDesc, true, "", false)
+		newCommitID, err := GenNewCommit(repo, headCommit, newDirID, user, commitDesc, true, "", false)
 		if err != nil {
 			err := fmt.Errorf("failed to generate new commit: %v", err)
 			return "", err
@@ -2928,7 +3009,7 @@ func updateDir(repoID, dirPath, newDirID, user, headID string) (string, error) {
 		commitDesc = "Auto merge by system"
 	}
 
-	newCommitID, err := genNewCommit(repo, headCommit, rootID, user, commitDesc, true, "", false)
+	newCommitID, err := GenNewCommit(repo, headCommit, rootID, user, commitDesc, true, "", false)
 	if err != nil {
 		err := fmt.Errorf("failed to generate new commit: %v", err)
 		return "", err
@@ -3326,14 +3407,14 @@ func putFile(rsp http.ResponseWriter, r *http.Request, repoID, parentDir, user, 
 	newDent := fsmgr.NewDirent(fileID, fileName, uint32(mode), mtime, user, size)
 
 	var names []string
-	rootID, err := doPostMultiFiles(repo, headCommit.RootID, canonPath, []*fsmgr.SeafDirent{newDent}, user, true, &names)
+	rootID, err := DoPostMultiFiles(repo, headCommit.RootID, canonPath, []*fsmgr.SeafDirent{newDent}, user, true, &names)
 	if err != nil {
 		err := fmt.Errorf("failed to put file %s to %s in repo %s: %v", fileName, canonPath, repo.ID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
 	desc := fmt.Sprintf("Modified \"%s\"", fileName)
-	_, err = genNewCommit(repo, headCommit, rootID, user, desc, true, gcID, true)
+	_, err = GenNewCommit(repo, headCommit, rootID, user, desc, true, gcID, true)
 	if err != nil {
 		if errors.Is(err, ErrGCConflict) {
 			return &appError{nil, "GC Conflict.\n", http.StatusConflict}
@@ -3569,14 +3650,14 @@ func commitFileBlocks(repoID, parentDir, fileName, blockIDsJSON, user string, fi
 	mode := (syscall.S_IFREG | 0644)
 	newDent := fsmgr.NewDirent(fileID, fileName, uint32(mode), mtime, user, fileSize)
 	var names []string
-	rootID, err := doPostMultiFiles(repo, headCommit.RootID, canonPath, []*fsmgr.SeafDirent{newDent}, user, replace, &names)
+	rootID, err := DoPostMultiFiles(repo, headCommit.RootID, canonPath, []*fsmgr.SeafDirent{newDent}, user, replace, &names)
 	if err != nil {
 		err := fmt.Errorf("failed to post file %s to %s in repo %s: %v", fileName, canonPath, repo.ID, err)
 		return "", &appError{err, "", http.StatusInternalServerError}
 	}
 
 	desc := fmt.Sprintf("Added \"%s\"", fileName)
-	_, err = genNewCommit(repo, headCommit, rootID, user, desc, true, gcID, true)
+	_, err = GenNewCommit(repo, headCommit, rootID, user, desc, true, gcID, true)
 	if err != nil {
 		if errors.Is(err, ErrGCConflict) {
 			return "", &appError{nil, "GC Conflict.\n", http.StatusConflict}
