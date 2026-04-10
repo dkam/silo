@@ -98,3 +98,6 @@ __pycache__/
 .cache/
 fileserver/fileserver
 cmd/seafile-tui/seafile-tui
+.envrc
+.claude/
+
