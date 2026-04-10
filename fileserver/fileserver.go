@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
@@ -44,6 +46,9 @@ var pidFilePath string
 var logFp *os.File
 
 var seafilePair, ccnetPair *dbutil.DBPair
+
+var httpServer *http.Server
+var shutdownDone = make(chan struct{})
 
 var logToStdout bool
 var debugLog bool
@@ -323,27 +328,60 @@ func main() {
 
 	log.Print("Seafile file server started.")
 
-	server := new(http.Server)
-	server.Addr = fmt.Sprintf("%s:%d", option.Host, option.Port)
+	httpServer = new(http.Server)
+	httpServer.Addr = fmt.Sprintf("%s:%d", option.Host, option.Port)
 	var handler http.Handler = middleware.StripSeafhttpPrefix(router)
 	if debugLog {
 		handler = middleware.DebugLogger(handler)
 	}
-	server.Handler = handler
+	httpServer.Handler = handler
 
-	err = server.ListenAndServe()
-	if err != nil {
-		log.Errorf("File server exiting: %v", err)
-	}
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Errorf("File server exiting: %v", err)
+		}
+	}()
+
+	<-shutdownDone
 }
 
 func handleSignals() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-signalChan
+
+	log.Info("shutdown signal received, draining HTTP server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if httpServer != nil {
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Warnf("HTTP server shutdown error: %v", err)
+		}
+	}
+
+	checkpointAndClose(seafilePair, "seafile")
+	checkpointAndClose(ccnetPair, "ccnet")
+
 	metrics.Stop()
 	removePidfile(pidFilePath)
-	os.Exit(0)
+
+	log.Info("shutdown complete")
+	close(shutdownDone)
+}
+
+func checkpointAndClose(pair *dbutil.DBPair, name string) {
+	if pair == nil {
+		return
+	}
+	if option.DBType == "sqlite" {
+		if _, err := pair.Write.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+			log.Warnf("%s WAL checkpoint failed: %v", name, err)
+		}
+	}
+	if err := pair.Close(); err != nil {
+		log.Warnf("%s DB close failed: %v", name, err)
+	}
 }
 
 func handleUser1Signal() {
