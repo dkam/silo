@@ -96,8 +96,7 @@ tests/conf/PeerMgr
 /symbols
 __pycache__/
 .cache/
-fileserver/fileserver
-fileserver/silod
+/silo
 cmd/silo/silo
 notification-server/notification-server
 .envrc

@@ -1,5 +1,5 @@
-// Main package for Seafile file server.
-package main
+// Package silod is the Silo file server daemon.
+package silod
 
 import (
 	"context"
@@ -54,17 +54,9 @@ var logToStdout bool
 var debugLog bool
 
 func init() {
-	flag.StringVar(&centralDir, "F", "", "central config directory")
-	flag.StringVar(&dataDir, "d", "", "seafile data directory")
-	flag.StringVar(&logFile, "l", "", "log file path")
-	flag.StringVar(&pidFilePath, "P", "", "pid file path")
-	flag.BoolVar(&debugLog, "debug", false, "log every HTTP request (method, path, status, duration)")
-
-	env := os.Getenv("SEAFILE_LOG_TO_STDOUT")
-	if env == "true" {
+	if os.Getenv("SEAFILE_LOG_TO_STDOUT") == "true" {
 		logToStdout = true
 	}
-
 	log.SetFormatter(&LogFormatter{})
 }
 
@@ -212,11 +204,29 @@ func removePidfile(pid_file_path string) error {
 	return nil
 }
 
-func main() {
-	flag.Parse()
+// Run starts the fileserver daemon. It parses its own flags from args (which
+// should be everything after the `serve` subcommand), initializes databases
+// and managers, and blocks until shutdown. It returns nil on graceful exit;
+// any error during argument parsing or startup is returned to the caller.
+// Note: much of the server bootstrap still uses log.Fatalf for fatal conditions,
+// which calls os.Exit directly — that behavior is unchanged from the previous
+// standalone binary.
+func Run(args []string) error {
+	fs := flag.NewFlagSet("silo serve", flag.ContinueOnError)
+	fs.StringVar(&centralDir, "F", "", "central config directory")
+	fs.StringVar(&dataDir, "d", "", "seafile data directory")
+	fs.StringVar(&logFile, "l", "", "log file path")
+	fs.StringVar(&pidFilePath, "P", "", "pid file path")
+	fs.BoolVar(&debugLog, "debug", false, "log every HTTP request (method, path, status, duration)")
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
+		return err
+	}
 
 	if centralDir == "" {
-		log.Fatal("central config directory must be specified.")
+		return fmt.Errorf("central config directory must be specified")
 	}
 
 	if pidFilePath != "" {
@@ -343,6 +353,7 @@ func main() {
 	}()
 
 	<-shutdownDone
+	return nil
 }
 
 func handleSignals() {

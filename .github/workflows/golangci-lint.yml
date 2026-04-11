@@ -8,22 +8,21 @@ permissions:
   # pull-requests: read
 
 jobs:
-  golangci-fileserver:
-    name: lint
+  golangci-silo:
+    name: lint silo
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.59
-          working-directory: ./fileserver
+          version: v1.61
           args: --timeout=5m
   golangci-notification-server:
-    name: lint
+    name: lint notification-server
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +32,6 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.59
+          version: v1.61
           working-directory: ./notification-server
           args: --timeout=5m

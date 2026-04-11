@@ -228,7 +228,7 @@ type appHandler func(http.ResponseWriter, *http.Request) *appError
 
 ## Build System
 
-GNU Autotools for C code. Standard `go build` for Go (go.mod in fileserver/).
+GNU Autotools for C code. Standard `go build ./cmd/silo` from the repo root for the Go unified binary (server + TUI + CLI, single go.mod at the root).
 
 ## Client Repositories
 

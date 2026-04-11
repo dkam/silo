@@ -1,4 +1,4 @@
-package main
+package silod
 
 import (
 	"context"

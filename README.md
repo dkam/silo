@@ -23,13 +23,13 @@ Silo also ships with `silo`, a terminal UI built on [Bubble Tea](https://github.
               │
         ┌─────┴─────┐
         ▼           ▼
-   SQLite or    Filesystem
-   MySQL        (content-addressable
+     SQLite     Filesystem
+                (content-addressable
                 blocks / commits / fs)
 ```
 
 - One process. No RPC, no Python, no controller.
-- Two logical databases — `ccnet` (users, groups) and `seafile` (repos, shares, tokens). Both live in a SQLite file or a MySQL schema.
+- Two logical databases — `ccnet` (users, groups) and `seafile` (repos, shares, tokens). Both live in embedded SQLite files in the data directory.
 - Content-addressable object store under `{data-dir}/storage/` with separate trees for blocks, commits, and filesystem objects.
 
 ## Features
@@ -41,24 +41,30 @@ Silo also ships with `silo`, a terminal UI built on [Bubble Tea](https://github.
 - File operations: upload, download, mkdir, rename, move, delete
 - Directory listing via `/api/v1/repos/{id}/dir/`
 - Full Seafile sync protocol for desktop and SeaDrive clients
-- SQLite (embedded, WAL mode, read/write connection split) or MySQL backend
+- Embedded SQLite backend (WAL mode, read/write connection split)
 - Auto-generated ephemeral JWT signing key if `JWT_PRIVATE_KEY` is unset
 - Seafile-compatible endpoints: `/api2/auth-token/`, `/api2/repos/`, `/api2/repos/{id}/repo-tokens/`, `/api2/repos/{id}/download-info/`, plus the full sync path
 
 ## Quick start
 
-### Run the server (SQLite)
+### Build
+
+Everything ships as one binary. From the repo root:
 
 ```bash
-cd fileserver
-go build .
+go build ./cmd/silo
+```
 
+This produces a `silo` executable (~20 MB) that contains the file server daemon, the interactive TUI, and the scripting CLI.
+
+### Run the server
+
+```bash
 mkdir -p /tmp/silo-data
-SEAFILE_DB_TYPE=sqlite \
 SEAFILE_ADMIN_EMAIL=admin@example.com \
 SEAFILE_ADMIN_PASSWORD=changeme \
 SEAFILE_LOG_TO_STDOUT=1 \
-./fileserver -F /tmp/silo-data -d /tmp/silo-data
+./silo serve -F /tmp/silo-data -d /tmp/silo-data
 ```
 
 The server listens on `:8082`. On first run it creates the ccnet and seafile SQLite databases, the storage directory, and the admin user.
@@ -68,16 +74,49 @@ The server listens on `:8082`. On first run it creates the ccnet and seafile SQL
 In another terminal:
 
 ```bash
-cd cmd/silo
-go build .
-
-SEAFILE_URL=http://localhost:8082 \
-SEAFILE_EMAIL=admin@example.com \
-SEAFILE_PASSWORD=changeme \
-./silo
+./silo tui http://localhost:8082
 ```
 
-Auto-login kicks in if both `SEAFILE_EMAIL` and `SEAFILE_PASSWORD` are set. From there: `n` to create a library, `enter` to open it, `u` to upload a local file, `v` to move, `r` to rename, `x` to delete, `q` to quit.
+The server URL can also come from `SILO_URL` / `SEAFILE_URL`, or be derived from the same `SEAFILE_FILESERVER_HOST` / `SEAFILE_FILESERVER_PORT` the daemon reads. If none are set, it defaults to `http://localhost:8082`.
+
+Auto-login kicks in if both an email and password are available. The TUI checks, in order:
+
+- `SILO_EMAIL` / `SILO_PASSWORD`
+- `SEAFILE_EMAIL` / `SEAFILE_PASSWORD`
+- `SEAFILE_ADMIN_EMAIL` / `SEAFILE_ADMIN_PASSWORD` (the same vars used to bootstrap the admin account, so one `.envrc` can drive both the server and the client)
+
+A typical `.envrc` for local development with [direnv](https://direnv.net/):
+
+```bash
+export SEAFILE_FILESERVER_HOST=127.0.0.1
+export SEAFILE_FILESERVER_PORT=8083
+export SEAFILE_ADMIN_EMAIL=admin@seafile.local
+export SEAFILE_ADMIN_PASSWORD=test
+export SEAFILE_LOG_TO_STDOUT=true
+```
+
+With that loaded, `./silo serve -F /tmp/silo-conf -d /tmp/silo-data` and `./silo tui` both pick up the same host, port, and credentials — no flags needed.
+
+From the TUI: `n` to create a library, `enter` to open it, `u` to upload a local file, `v` to move, `r` to rename, `x` to delete, `q` to quit.
+
+### Use the CLI
+
+The same binary also exposes non-interactive subcommands for scripting:
+
+```bash
+silo repos                          # list libraries (use --json for scripts)
+silo repo create "My library"       # prints the new repo ID
+silo ls <repo-id> [/path]           # list a directory
+silo put <repo-id> ./file.txt /     # upload
+silo get <repo-id> /file.txt ~/out  # download
+silo mkdir <repo-id> /sub
+silo mv <repo-id> /a.txt /sub/a.txt
+silo rename <repo-id> /sub/a.txt b.txt
+silo rm <repo-id> /sub/b.txt
+silo repo rm <repo-id>
+```
+
+`silo help` prints the full subcommand list.
 
 ## Configuration
 
@@ -87,17 +126,10 @@ Auto-login kicks in if both `SEAFILE_EMAIL` and `SEAFILE_PASSWORD` are set. From
 |---|---|---|
 | `SEAFILE_FILESERVER_HOST` | Bind address | from `seafile.conf` |
 | `SEAFILE_FILESERVER_PORT` | Listen port | `8082` |
-| `SEAFILE_DB_TYPE` | `sqlite` or `mysql` | from `seafile.conf` |
 | `SEAFILE_ADMIN_EMAIL` | Create admin user on startup | — |
 | `SEAFILE_ADMIN_PASSWORD` | Admin password | — |
 | `JWT_PRIVATE_KEY` | Session token signing key | auto-generated (ephemeral) |
 | `SEAFILE_LOG_TO_STDOUT` | Write logs to stdout instead of file | unset |
-| `SEAFILE_MYSQL_DB_HOST` | MySQL host | from `seafile.conf` |
-| `SEAFILE_MYSQL_DB_PORT` | MySQL port | `3306` |
-| `SEAFILE_MYSQL_DB_USER` | MySQL user | from `seafile.conf` |
-| `SEAFILE_MYSQL_DB_PASSWORD` | MySQL password | from `seafile.conf` |
-| `SEAFILE_MYSQL_DB_CCNET_DB_NAME` | ccnet database name | from `seafile.conf` |
-| `SEAFILE_MYSQL_DB_SEAFILE_DB_NAME` | seafile database name | from `seafile.conf` |
 
 Env vars take precedence over `seafile.conf`, so the same binary can be pointed at different deployments without editing files.
 
@@ -142,7 +174,7 @@ See [`docs/future-features.md`](docs/future-features.md) for the rough roadmap.
 fileserver/        Active Go server
   ├── api/         Management API handlers (/api/v1/*)
   ├── authmgr/     Password validation + JWT
-  ├── dbutil/      SQLite / MySQL abstraction, portable upsert helpers
+  ├── dbutil/      SQLite connection management and query helpers
   ├── share/       Permission checking
   ├── tokenstore/  In-memory access token cache
   ├── keycache/    In-memory decrypt key cache

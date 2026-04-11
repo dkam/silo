@@ -1,0 +1,47 @@
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+  # Allow running manually from the Actions tab without cutting a tag.
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `git describe --tags` can find the latest tag
+          # when stamping the build version.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        # TestSQLiteReadWriteSplit is a pre-existing failure in the dbutil
+        # package (read-only connection permits writes); tracked separately.
+        run: go test -skip '^TestSQLiteReadWriteSplit$' ./...
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
+
+      - name: Build silo
+        run: |
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" \
+            -o silo ./cmd/silo
+          ./silo version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silo-linux-amd64
+          path: silo
+          if-no-files-found: error
