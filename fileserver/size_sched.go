@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"os"
 	"time"
 
 	"gopkg.in/ini.v1"
@@ -31,21 +31,18 @@ var redisClient *redis.Client
 
 func sizeSchedulerInit() {
 	var n int = 1
-	var seafileConfPath string
-	if centralDir != "" {
-		seafileConfPath = filepath.Join(centralDir, "seafile.conf")
-	} else {
-		seafileConfPath = filepath.Join(absDataDir, "seafile.conf")
-	}
-	config, err := ini.Load(seafileConfPath)
-	if err != nil {
-		log.Fatalf("Failed to load seafile.conf: %v", err)
-	}
-	if section, err := config.GetSection("scheduler"); err == nil {
-		if key, err := section.GetKey("size_sched_thread_num"); err == nil {
-			num, err := key.Int()
-			if err == nil {
-				n = num
+	seafileConfPath := configFile
+	if _, err := os.Stat(seafileConfPath); err == nil {
+		config, err := ini.Load(seafileConfPath)
+		if err != nil {
+			log.Fatalf("Failed to load seafile.conf: %v", err)
+		}
+		if section, err := config.GetSection("scheduler"); err == nil {
+			if key, err := section.GetKey("size_sched_thread_num"); err == nil {
+				num, err := key.Int()
+				if err == nil {
+					n = num
+				}
 			}
 		}
 	}

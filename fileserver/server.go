@@ -42,7 +42,7 @@ import (
 )
 
 var dataDir, absDataDir string
-var centralDir string
+var configFile string
 var logFile, absLogFile string
 var pidFilePath string
 var logFp *os.File
@@ -92,7 +92,7 @@ func (f *LogFormatter) Format(entry *log.Entry) ([]byte, error) {
 }
 
 func loadDatabases() {
-	dbOpt, err := option.LoadDBOption(centralDir)
+	dbOpt, err := option.LoadDBOption(configFile)
 	if err != nil {
 		log.Fatalf("Failed to load database: %v", err)
 	}
@@ -214,7 +214,7 @@ func removePidfile(pid_file_path string) error {
 // standalone binary.
 func Run(args []string) error {
 	fs := flag.NewFlagSet("silo serve", flag.ContinueOnError)
-	fs.StringVar(&centralDir, "F", "", "central config directory")
+	fs.StringVar(&configFile, "C", "", "path to seafile.conf (optional)")
 	fs.StringVar(&dataDir, "d", "", "seafile data directory")
 	fs.StringVar(&logFile, "l", "", "log file path")
 	fs.StringVar(&pidFilePath, "P", "", "pid file path")
@@ -224,10 +224,6 @@ func Run(args []string) error {
 			return nil
 		}
 		return err
-	}
-
-	if centralDir == "" {
-		return fmt.Errorf("central config directory must be specified")
 	}
 
 	if pidFilePath != "" {
@@ -277,7 +273,7 @@ func Run(args []string) error {
 		log.Fatalf("Failed to read seahub config: %v", err)
 	}
 
-	option.LoadFileServerOptions(centralDir)
+	option.LoadFileServerOptions(configFile)
 	loadDatabases()
 
 	level, err := log.ParseLevel(option.LogLevel)
@@ -290,11 +286,14 @@ func Run(args []string) error {
 
 	repomgr.Init(seafilePair.Read, seafilePair.Write)
 
-	fsmgr.Init(centralDir, dataDir, option.FsCacheLimit)
+	// First arg is the legacy "central config path"; it's threaded into
+	// objstore.New but never used there. Passing "" keeps the signatures
+	// untouched until a wider cleanup removes the parameter entirely.
+	fsmgr.Init("", dataDir, option.FsCacheLimit)
 
-	blockmgr.Init(centralDir, dataDir)
+	blockmgr.Init("", dataDir)
 
-	commitmgr.Init(centralDir, dataDir)
+	commitmgr.Init("", dataDir)
 
 	share.Init(ccnetPair.Read, seafilePair.Read, option.GroupTableName, option.CloudMode)
 

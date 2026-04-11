@@ -81,10 +81,10 @@ mkdir -p /tmp/silo-data
 SEAFILE_ADMIN_EMAIL=admin@example.com \
 SEAFILE_ADMIN_PASSWORD=changeme \
 SEAFILE_LOG_TO_STDOUT=1 \
-./silo serve -F /tmp/silo-data -d /tmp/silo-data
+./silo serve -d /tmp/silo-data
 ```
 
-The server listens on `:8082`. On first run it creates the ccnet and seafile SQLite databases, the storage directory, and the admin user.
+The server listens on `:8082`. On first run it creates the ccnet and seafile SQLite databases, the storage directory, and the admin user. No config file is required — Silo runs on compiled defaults plus environment variables. If you want to tweak low-level settings (quota defaults, cache limits, cluster options) you can pass a `seafile.conf` with `-C /path/to/seafile.conf`.
 
 ### Run the TUI client
 
@@ -112,7 +112,7 @@ export SEAFILE_ADMIN_PASSWORD=test
 export SEAFILE_LOG_TO_STDOUT=true
 ```
 
-With that loaded, `./silo serve -F /tmp/silo-conf -d /tmp/silo-data` and `./silo tui` both pick up the same host, port, and credentials — no flags needed.
+With that loaded, `./silo serve -d /tmp/silo-data` and `./silo tui` both pick up the same host, port, and credentials — no flags needed.
 
 From the TUI: `n` to create a library, `enter` to open it, `u` to upload a local file, `v` to move, `r` to rename, `x` to delete, `q` to quit.
 
@@ -141,21 +141,21 @@ silo repo rm <repo-id>
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `SEAFILE_FILESERVER_HOST` | Bind address | from `seafile.conf` |
+| `SEAFILE_FILESERVER_HOST` | Bind address | `0.0.0.0` (or from `seafile.conf` if provided) |
 | `SEAFILE_FILESERVER_PORT` | Listen port | `8082` |
 | `SEAFILE_ADMIN_EMAIL` | Create admin user on startup | — |
 | `SEAFILE_ADMIN_PASSWORD` | Admin password | — |
 | `JWT_PRIVATE_KEY` | Session token signing key | auto-generated (ephemeral) |
 | `SEAFILE_LOG_TO_STDOUT` | Write logs to stdout instead of file | unset |
 
-Env vars take precedence over `seafile.conf`, so the same binary can be pointed at different deployments without editing files.
+Env vars take precedence over `seafile.conf`, so the same binary can be pointed at different deployments without editing files. `seafile.conf` itself is optional — if you don't pass `-C`, Silo uses compiled defaults.
 
 ### CLI flags
 
 | Flag | Purpose |
 |---|---|
-| `-F <dir>` | Central config directory (contains `seafile.conf`) |
-| `-d <dir>` | Data directory (storage, SQLite files, logs) |
+| `-d <dir>` | Data directory (storage, SQLite files, logs). **Required.** |
+| `-C <file>` | Path to `seafile.conf` (optional; only needed to override compiled defaults) |
 | `-l <file>` | Log file path (ignored if `SEAFILE_LOG_TO_STDOUT` is set) |
 | `-P <file>` | PID file path |
 | `-debug` | Log every HTTP request |

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -122,16 +121,28 @@ func initDefaultOptions() {
 	MaxIndexingFiles = 10
 }
 
-func LoadFileServerOptions(centralDir string) {
+// LoadFileServerOptions loads seafile.conf from the given path. An empty
+// path or a missing file is fine — Silo then runs entirely on compiled
+// defaults plus environment variable overrides.
+func LoadFileServerOptions(configFile string) {
 	initDefaultOptions()
-
-	seafileConfPath := filepath.Join(centralDir, "seafile.conf")
 
 	opts := ini.LoadOptions{}
 	opts.SpaceBeforeInlineComment = true
-	config, err := ini.LoadSources(opts, seafileConfPath)
-	if err != nil {
-		log.Fatalf("Failed to load seafile.conf: %v", err)
+
+	var config *ini.File
+	if configFile != "" {
+		if _, err := os.Stat(configFile); err == nil {
+			loaded, err := ini.LoadSources(opts, configFile)
+			if err != nil {
+				log.Fatalf("Failed to load %s: %v", configFile, err)
+			}
+			config = loaded
+		}
+	}
+	if config == nil {
+		// No config file — run on defaults + env vars.
+		config = ini.Empty(opts)
 	}
 	CloudMode = false
 	if section, err := config.GetSection("general"); err == nil {
@@ -375,10 +386,11 @@ func LoadSeahubConfig() error {
 	return nil
 }
 
-func LoadDBOption(centralDir string) (*DBOption, error) {
-	dbOpt, err := loadDBOptionFromFile(centralDir)
+func LoadDBOption(configFile string) (*DBOption, error) {
+	dbOpt, err := loadDBOptionFromFile(configFile)
 	if err != nil {
 		log.Warnf("failed to load database config: %v", err)
+		dbOpt = &DBOption{DBEngine: "sqlite"}
 	}
 
 	// Check env override for DB type
@@ -409,16 +421,23 @@ func LoadDBOption(centralDir string) (*DBOption, error) {
 	return dbOpt, nil
 }
 
-func loadDBOptionFromFile(centralDir string) (*DBOption, error) {
+func loadDBOptionFromFile(configFile string) (*DBOption, error) {
 	dbOpt := new(DBOption)
-	dbOpt.DBEngine = "mysql"
+	// Default to SQLite — Silo ships with an embedded store and the
+	// [database] section only needs to exist when the operator wants MySQL.
+	dbOpt.DBEngine = "sqlite"
 
-	seafileConfPath := filepath.Join(centralDir, "seafile.conf")
+	if configFile == "" {
+		return dbOpt, nil
+	}
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return dbOpt, nil
+	}
 	opts := ini.LoadOptions{}
 	opts.SpaceBeforeInlineComment = true
-	config, err := ini.LoadSources(opts, seafileConfPath)
+	config, err := ini.LoadSources(opts, configFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load seafile.conf: %v", err)
+		return nil, fmt.Errorf("failed to load %s: %v", configFile, err)
 	}
 
 	section, err := config.GetSection("database")
@@ -426,7 +445,7 @@ func loadDBOptionFromFile(centralDir string) (*DBOption, error) {
 		return dbOpt, nil
 	}
 
-	dbEngine := "mysql"
+	dbEngine := "sqlite"
 	key, err := section.GetKey("type")
 	if err == nil {
 		dbEngine = key.String()
