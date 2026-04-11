@@ -140,12 +140,17 @@ func LoadFileServerOptions(centralDir string) {
 		}
 	}
 
-	notifServer := os.Getenv("INNER_NOTIFICATION_SERVER_URL")
-	enableNotifServer := os.Getenv("ENABLE_NOTIFICATION_SERVER")
-	if notifServer != "" && enableNotifServer == "true" {
-		NotificationURL = notifServer
-		EnableNotification = true
+	// Notification server: silo runs it in-process on the same port as the
+	// fileserver, at /notification. It is enabled by default; set
+	// ENABLE_NOTIFICATION_SERVER=false to disable.
+	//
+	// INNER_NOTIFICATION_SERVER_URL is kept as a legacy no-op env var so
+	// deployments carrying it forward from upstream Seafile don't break.
+	EnableNotification = true
+	if v := os.Getenv("ENABLE_NOTIFICATION_SERVER"); v == "false" || v == "0" {
+		EnableNotification = false
 	}
+	NotificationURL = os.Getenv("INNER_NOTIFICATION_SERVER_URL")
 
 	if section, err := config.GetSection("httpserver"); err == nil {
 		parseFileServerSection(section)

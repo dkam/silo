@@ -43,6 +43,7 @@ Silo also ships with `silo`, a terminal UI built on [Bubble Tea](https://github.
 - File operations: upload, download, mkdir, rename, move, delete
 - Directory listing via `/api/v1/repos/{id}/dir/`
 - Full Seafile sync protocol for desktop and SeaDrive clients
+- In-process notification server (WebSocket `/notification`) so SeaDrive / Seafile Desktop get push events on repo updates instead of polling
 - Embedded SQLite backend (WAL mode, read/write connection split)
 - Auto-generated ephemeral JWT signing key if `JWT_PRIVATE_KEY` is unset
 - Seafile-compatible endpoints: `/api2/auth-token/`, `/api2/repos/`, `/api2/repos/{id}/repo-tokens/`, `/api2/repos/{id}/download-info/`, plus the full sync path
@@ -178,7 +179,6 @@ Silo is a lean rewrite focused on the sync path and a minimal management API. Th
 - No group management API
 - No `is_staff` / admin privilege check in the API layer — all authenticated users have equal permissions
 - No web UI — use the TUI or a Seafile client
-- No notification server — SeaDrive falls back to polling
 - No trash / restore or history / revision endpoints
 - No encrypted-repo support in the TUI (sync clients can still use encrypted repos)
 

@@ -30,6 +30,7 @@ import (
 	"github.com/dkam/silo/fileserver/keycache"
 	"github.com/dkam/silo/fileserver/metrics"
 	"github.com/dkam/silo/fileserver/middleware"
+	"github.com/dkam/silo/fileserver/notif"
 	"github.com/dkam/silo/fileserver/option"
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/share"
@@ -324,6 +325,8 @@ func Run(args []string) error {
 
 	metrics.Init()
 
+	notif.Init()
+
 	router := newHTTPRouter()
 
 	httpServer = new(http.Server)
@@ -476,6 +479,11 @@ func newHTTPRouter() *mux.Router {
 	r.Handle("/repo/{repoid:[\\da-z]{8}-[\\da-z]{4}-[\\da-z]{4}-[\\da-z]{4}-[\\da-z]{12}}/block-map/{id:[\\da-z]{40}}",
 		appHandler(getBlockMapCB))
 	r.Handle("/accessible-repos{slash:\\/?}", appHandler(getAccessibleRepoListCB))
+
+	// in-process notification-server WebSocket endpoint
+	if option.EnableNotification {
+		r.HandleFunc("/notification", notif.Handler)
+	}
 
 	// pprof
 	r.Handle("/debug/pprof", &profileHandler{http.HandlerFunc(pprof.Index)})

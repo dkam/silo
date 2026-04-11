@@ -35,6 +35,7 @@ import (
 	"github.com/dkam/silo/fileserver/diff"
 	"github.com/dkam/silo/fileserver/fsmgr"
 	"github.com/dkam/silo/fileserver/keycache"
+	"github.com/dkam/silo/fileserver/notif"
 	"github.com/dkam/silo/fileserver/option"
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/tokenstore"
@@ -2207,7 +2208,7 @@ func onBranchUpdated(repoID string, commitID string, updateRepoInfo bool) error 
 	}
 
 	if option.EnableNotification {
-		notifRepoUpdate(repoID, commitID)
+		notif.NotifyRepoUpdate(repoID, commitID)
 	}
 
 	isVirtual, err := repomgr.IsVirtualRepo(repoID)
@@ -2218,47 +2219,6 @@ func onBranchUpdated(repoID string, commitID string, updateRepoInfo bool) error 
 		return nil
 	}
 	publishUpdateEvent(repoID, commitID)
-	return nil
-}
-
-type notifEvent struct {
-	Type    string           `json:"type"`
-	Content *repoUpdateEvent `json:"content"`
-}
-type repoUpdateEvent struct {
-	RepoID   string `json:"repo_id"`
-	CommitID string `json:"commit_id"`
-}
-
-func notifRepoUpdate(repoID string, commitID string) error {
-	content := new(repoUpdateEvent)
-	content.RepoID = repoID
-	content.CommitID = commitID
-	event := new(notifEvent)
-	event.Type = "repo-update"
-	event.Content = content
-	msg, err := json.Marshal(event)
-	if err != nil {
-		log.Errorf("failed to encode repo update event: %v", err)
-		return err
-	}
-
-	url := fmt.Sprintf("%s/events", option.NotificationURL)
-	exp := time.Now().Add(time.Second * 300).Unix()
-	token, err := utils.GenNotifJWTToken(repoID, "", exp)
-	if err != nil {
-		log.Errorf("failed to generate jwt token: %v", err)
-		return err
-	}
-	header := map[string][]string{
-		"Authorization": {"Token " + token},
-	}
-	_, _, err = utils.HttpCommon("POST", url, header, bytes.NewReader(msg))
-	if err != nil {
-		log.Warnf("failed to send repo update event: %v", err)
-		return err
-	}
-
 	return nil
 }
 

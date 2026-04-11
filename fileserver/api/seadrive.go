@@ -7,6 +7,7 @@ import (
 	"github.com/dkam/silo/fileserver/apitokenstore"
 	"github.com/dkam/silo/fileserver/authmgr"
 	"github.com/dkam/silo/fileserver/middleware"
+	"github.com/dkam/silo/fileserver/option"
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/share"
 	log "github.com/sirupsen/logrus"
@@ -51,14 +52,26 @@ func SeaDriveAuthPingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type serverInfoResponse struct {
-	Version  string   `json:"version"`
-	Features []string `json:"features"`
+	Version         string   `json:"version"`
+	Features        []string `json:"features"`
+	NotificationURL string   `json:"notification_url,omitempty"`
 }
 
 func SeaDriveServerInfoHandler(w http.ResponseWriter, r *http.Request) {
+	features := []string{"seafile-basic"}
+	var notificationURL string
+	if option.EnableNotification {
+		features = append(features, "notification")
+		scheme := "ws"
+		if r.TLS != nil {
+			scheme = "wss"
+		}
+		notificationURL = scheme + "://" + r.Host + "/notification"
+	}
 	writeJSON(w, http.StatusOK, serverInfoResponse{
-		Version:  "11.0.0",
-		Features: []string{"seafile-basic"},
+		Version:         "11.0.0",
+		Features:        features,
+		NotificationURL: notificationURL,
 	})
 }
 
