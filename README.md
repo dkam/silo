@@ -2,6 +2,8 @@
 
 A single-binary Go file sync server, protocol-compatible with Seafile clients.
 
+This code is experimental.  Assume dataloss is likely.
+
 ## What is Silo?
 
 Silo is a Go rewrite of the Seafile server architecture. Where upstream Seafile ships a C daemon (`seaf-server`), a Python/Django web layer (Seahub), and a process manager to tie them together, Silo collapses all of that into a single Go binary that speaks HTTP directly and talks directly to its database.
@@ -47,9 +49,23 @@ Silo also ships with `silo`, a terminal UI built on [Bubble Tea](https://github.
 
 ## Quick start
 
-### Build
+### Install
 
-Everything ships as one binary. From the repo root:
+On macOS or Linux via Homebrew:
+
+```bash
+brew install dkam/silo/silo
+```
+
+Homebrew auto-taps `dkam/homebrew-silo` on first install, so no separate `brew tap` step is needed.
+
+### Download a release
+
+Prebuilt binaries for macOS and Linux are published on the [releases page](https://github.com/dkam/silo/releases).
+
+### Build from source
+
+Alternatively, build the binary yourself. From the repo root:
 
 ```bash
 go build ./cmd/silo
