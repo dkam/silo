@@ -97,7 +97,9 @@ tests/conf/PeerMgr
 __pycache__/
 .cache/
 fileserver/fileserver
-cmd/seafile-tui/seafile-tui
+fileserver/silod
+cmd/silo/silo
+notification-server/notification-server
 .envrc
 .claude/
 

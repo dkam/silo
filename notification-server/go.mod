@@ -1,4 +1,4 @@
-module github.com/haiwen/seafile-server/notification-server
+module github.com/dkam/silo/notification-server
 
 go 1.17
 

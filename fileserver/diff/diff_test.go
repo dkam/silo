@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/haiwen/seafile-server/fileserver/fsmgr"
+	"github.com/dkam/silo/fileserver/fsmgr"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/crypto/pbkdf2"
 
-	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/dkam/silo/fileserver/option"
 )
 
 func init() {

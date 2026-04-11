@@ -1,4 +1,4 @@
-module github.com/haiwen/seafile-server/fileserver
+module github.com/dkam/silo/fileserver
 
 go 1.25.0
 

@@ -8,13 +8,13 @@ import (
 	"net/url"
 
 	"github.com/gorilla/mux"
-	"github.com/haiwen/seafile-server/fileserver/authmgr"
-	"github.com/haiwen/seafile-server/fileserver/fsmgr"
-	"github.com/haiwen/seafile-server/fileserver/middleware"
-	"github.com/haiwen/seafile-server/fileserver/option"
-	"github.com/haiwen/seafile-server/fileserver/repomgr"
-	"github.com/haiwen/seafile-server/fileserver/share"
-	"github.com/haiwen/seafile-server/fileserver/tokenstore"
+	"github.com/dkam/silo/fileserver/authmgr"
+	"github.com/dkam/silo/fileserver/fsmgr"
+	"github.com/dkam/silo/fileserver/middleware"
+	"github.com/dkam/silo/fileserver/option"
+	"github.com/dkam/silo/fileserver/repomgr"
+	"github.com/dkam/silo/fileserver/share"
+	"github.com/dkam/silo/fileserver/tokenstore"
 	log "github.com/sirupsen/logrus"
 )
 

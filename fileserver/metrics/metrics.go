@@ -12,7 +12,7 @@ import (
 
 	"github.com/dgraph-io/ristretto/z"
 	"github.com/go-redis/redis/v8"
-	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/dkam/silo/fileserver/option"
 
 	log "github.com/sirupsen/logrus"
 )

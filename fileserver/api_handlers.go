@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/haiwen/seafile-server/fileserver/commitmgr"
-	"github.com/haiwen/seafile-server/fileserver/fsmgr"
-	"github.com/haiwen/seafile-server/fileserver/middleware"
-	"github.com/haiwen/seafile-server/fileserver/repomgr"
-	"github.com/haiwen/seafile-server/fileserver/share"
-	"github.com/haiwen/seafile-server/fileserver/tokenstore"
+	"github.com/dkam/silo/fileserver/commitmgr"
+	"github.com/dkam/silo/fileserver/fsmgr"
+	"github.com/dkam/silo/fileserver/middleware"
+	"github.com/dkam/silo/fileserver/repomgr"
+	"github.com/dkam/silo/fileserver/share"
+	"github.com/dkam/silo/fileserver/tokenstore"
 	log "github.com/sirupsen/logrus"
 )
 

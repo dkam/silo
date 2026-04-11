@@ -1,0 +1,14 @@
+Silo
+Copyright 2026 Dan Milne and contributors
+Licensed under AGPLv3 (see LICENSE.txt)
+
+This project began as a fork of Seafile Server
+(https://github.com/haiwen/seafile-server), originally developed by
+Seafile Ltd. The Go implementation, standalone runtime, SeaDrive
+compatibility shims, and TUI client are new work; the file sync
+protocol and on-disk format remain compatible with Seafile clients.
+
+The Seafile name and logo are trademarks of Seafile Ltd. and are not
+used by this project. "Silo" is a separate project that speaks the
+Seafile sync protocol; it is not affiliated with or endorsed by
+Seafile Ltd.

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	// Change to non-blank imports when use
-	_ "github.com/haiwen/seafile-server/fileserver/blockmgr"
-	"github.com/haiwen/seafile-server/fileserver/commitmgr"
-	"github.com/haiwen/seafile-server/fileserver/dbutil"
-	"github.com/haiwen/seafile-server/fileserver/option"
+	_ "github.com/dkam/silo/fileserver/blockmgr"
+	"github.com/dkam/silo/fileserver/commitmgr"
+	"github.com/dkam/silo/fileserver/dbutil"
+	"github.com/dkam/silo/fileserver/option"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )

@@ -10,12 +10,12 @@ import (
 
 	"math/rand"
 
-	"github.com/haiwen/seafile-server/fileserver/commitmgr"
-	"github.com/haiwen/seafile-server/fileserver/diff"
-	"github.com/haiwen/seafile-server/fileserver/fsmgr"
-	"github.com/haiwen/seafile-server/fileserver/option"
-	"github.com/haiwen/seafile-server/fileserver/repomgr"
-	"github.com/haiwen/seafile-server/fileserver/workerpool"
+	"github.com/dkam/silo/fileserver/commitmgr"
+	"github.com/dkam/silo/fileserver/diff"
+	"github.com/dkam/silo/fileserver/fsmgr"
+	"github.com/dkam/silo/fileserver/option"
+	"github.com/dkam/silo/fileserver/repomgr"
+	"github.com/dkam/silo/fileserver/workerpool"
 	log "github.com/sirupsen/logrus"
 )
 

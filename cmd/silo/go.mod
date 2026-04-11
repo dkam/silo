@@ -1,4 +1,4 @@
-module github.com/haiwen/seafile-server/cmd/seafile-tui
+module github.com/dkam/silo/cmd/silo
 
 go 1.26.2
 

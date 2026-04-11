@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/haiwen/seafile-server/fileserver/commitmgr"
-	"github.com/haiwen/seafile-server/fileserver/fsmgr"
-	"github.com/haiwen/seafile-server/fileserver/repomgr"
+	"github.com/dkam/silo/fileserver/commitmgr"
+	"github.com/dkam/silo/fileserver/fsmgr"
+	"github.com/dkam/silo/fileserver/repomgr"
 )
 
 // Empty value of sha1

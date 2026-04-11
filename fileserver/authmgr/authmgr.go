@@ -16,8 +16,8 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	jwt "github.com/golang-jwt/jwt/v5"
-	"github.com/haiwen/seafile-server/fileserver/dbutil"
-	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/dkam/silo/fileserver/dbutil"
+	"github.com/dkam/silo/fileserver/option"
 	log "github.com/sirupsen/logrus"
 )
 

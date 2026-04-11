@@ -6,7 +6,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/dkam/silo/fileserver/option"
 )
 
 func IsValidUUID(u string) bool {

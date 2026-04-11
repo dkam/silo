@@ -15,8 +15,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/haiwen/seafile-server/fileserver/objstore"
-	"github.com/haiwen/seafile-server/fileserver/utils"
+	"github.com/dkam/silo/fileserver/objstore"
+	"github.com/dkam/silo/fileserver/utils"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/dgraph-io/ristretto"

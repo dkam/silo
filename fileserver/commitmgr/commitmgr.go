@@ -11,8 +11,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/haiwen/seafile-server/fileserver/objstore"
-	"github.com/haiwen/seafile-server/fileserver/utils"
+	"github.com/dkam/silo/fileserver/objstore"
+	"github.com/dkam/silo/fileserver/utils"
 )
 
 // Commit is a commit object

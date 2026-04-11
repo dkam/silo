@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/haiwen/seafile-server/fileserver/authmgr"
+	"github.com/dkam/silo/fileserver/authmgr"
 )
 
 type contextKey string

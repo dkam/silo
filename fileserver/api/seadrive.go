@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/haiwen/seafile-server/fileserver/apitokenstore"
-	"github.com/haiwen/seafile-server/fileserver/authmgr"
-	"github.com/haiwen/seafile-server/fileserver/middleware"
-	"github.com/haiwen/seafile-server/fileserver/repomgr"
-	"github.com/haiwen/seafile-server/fileserver/share"
+	"github.com/dkam/silo/fileserver/apitokenstore"
+	"github.com/dkam/silo/fileserver/authmgr"
+	"github.com/dkam/silo/fileserver/middleware"
+	"github.com/dkam/silo/fileserver/repomgr"
+	"github.com/dkam/silo/fileserver/share"
 	log "github.com/sirupsen/logrus"
 )
 

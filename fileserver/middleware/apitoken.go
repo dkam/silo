@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/haiwen/seafile-server/fileserver/apitokenstore"
+	"github.com/dkam/silo/fileserver/apitokenstore"
 	log "github.com/sirupsen/logrus"
 )
 

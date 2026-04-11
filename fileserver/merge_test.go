@@ -6,9 +6,9 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/haiwen/seafile-server/fileserver/commitmgr"
-	"github.com/haiwen/seafile-server/fileserver/fsmgr"
-	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/dkam/silo/fileserver/commitmgr"
+	"github.com/dkam/silo/fileserver/fsmgr"
+	"github.com/dkam/silo/fileserver/option"
 )
 
 const (

@@ -12,7 +12,7 @@ decide whether to shim it.
 ## Tested clients
 
 - **SeaDrive for macOS** — tested against 3.0.21 (via Homebrew cask)
-- **seafile-tui** — our own Go TUI (`cmd/seafile-tui`)
+- **silo** — our own Go TUI (`cmd/silo`)
 
 Other Seafile clients (desktop, CLI, mobile) should work in principle since
 they speak the same underlying sync protocol, but have not been verified.
@@ -23,7 +23,7 @@ Three coexisting auth mechanisms, each for a different client surface:
 
 | Scheme | Header | Used by | Validated against |
 |---|---|---|---|
-| JWT Bearer | `Authorization: Bearer <jwt>` | seafile-tui, `/api/v1/*` | `authmgr.ValidateSessionToken` (24h expiry) |
+| JWT Bearer | `Authorization: Bearer <jwt>` | silo (TUI), `/api/v1/*` | `authmgr.ValidateSessionToken` (24h expiry) |
 | API Token | `Authorization: Token <40-hex>` | SeaDrive, `/api2/*` | `apitokenstore.Lookup` (persistent in `ApiToken` SQL table) |
 | Repo Token | `Seafile-Repo-Token: <40-hex>` | All sync clients, `/repo/*`, `/accessible-repos` | `repomgr.GetEmailByToken` (persistent in `RepoUserToken` SQL table) |
 
@@ -36,7 +36,7 @@ The middleware for each lives in `fileserver/middleware/`:
 
 ### Native management API — `/api/v1/*`
 
-JSON request/response bodies. Used by seafile-tui. Protected by
+JSON request/response bodies. Used by the silo TUI. Protected by
 `RequireAuth` (JWT Bearer).
 
 | Method | Path | Purpose |

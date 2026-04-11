@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/haiwen/seafile-server/fileserver/authmgr"
-	"github.com/haiwen/seafile-server/fileserver/option"
+	"github.com/dkam/silo/fileserver/authmgr"
+	"github.com/dkam/silo/fileserver/option"
 )
 
 func init() {

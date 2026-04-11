@@ -2,7 +2,7 @@
 package blockmgr
 
 import (
-	"github.com/haiwen/seafile-server/fileserver/objstore"
+	"github.com/dkam/silo/fileserver/objstore"
 	"io"
 )
 

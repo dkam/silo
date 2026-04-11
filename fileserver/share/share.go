@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/haiwen/seafile-server/fileserver/option"
-	"github.com/haiwen/seafile-server/fileserver/repomgr"
+	"github.com/dkam/silo/fileserver/option"
+	"github.com/dkam/silo/fileserver/repomgr"
 	log "github.com/sirupsen/logrus"
 )
 
