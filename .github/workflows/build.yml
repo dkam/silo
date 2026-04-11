@@ -3,17 +3,49 @@ name: build
 on:
   push:
     tags: ["v*"]
-  # Allow running manually from the Actions tab without cutting a tag.
   workflow_dispatch:
 
+permissions:
+  contents: write # needed to create releases on tag pushes
+
 jobs:
-  build:
+  # One lint/test pass up front; no point building four platforms if the
+  # tree is already broken.
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so `git describe --tags` can find the latest tag
-          # when stamping the build version.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        # -p 1: several fileserver test packages share /tmp/conf/seafile-data
+        # with the same repo ID, so parallel package execution races. Proper
+        # fix is t.TempDir() in those tests.
+        #
+        # -skip TestSQLiteReadWriteSplit: pre-existing dbutil failure
+        # (read-only connection permits writes).
+        run: go test -p 1 -skip '^TestSQLiteReadWriteSplit$' ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -21,34 +53,58 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: go vet
-        run: go vet ./...
-
-      - name: go test
-        # -p 1 runs package tests serially. Several fileserver test packages
-        # (top-level silod, blockmgr, commitmgr) share the hardcoded path
-        # /tmp/conf/seafile-data with the same repo ID, so parallel package
-        # execution causes them to stomp on each other's files. A proper fix
-        # is to switch those tests to t.TempDir(), but for now -p 1 keeps CI
-        # deterministic.
-        #
-        # TestSQLiteReadWriteSplit is a pre-existing failure in the dbutil
-        # package (read-only connection permits writes); tracked separately.
-        run: go test -p 1 -skip '^TestSQLiteReadWriteSplit$' ./...
-
       - name: Compute version
         id: version
         run: echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
 
       - name: Build silo
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
+          mkdir -p dist
+          out="dist/silo-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           go build -trimpath \
             -ldflags "-s -w -X main.Version=${{ steps.version.outputs.version }}" \
-            -o silo ./cmd/silo
-          ./silo version
+            -o "$out" ./cmd/silo
+          # Run the binary only on matching host
+          if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "amd64" ]; then
+            "$out" version
+          fi
+          # Tarball with a stable inner filename (`silo`) so users get
+          # `./silo` after `tar xf`, regardless of platform.
+          tmp=$(mktemp -d)
+          cp "$out" "$tmp/silo"
+          tar -C "$tmp" -czf "$out.tar.gz" silo
+          (cd dist && sha256sum "$(basename "$out").tar.gz" > "$(basename "$out").tar.gz.sha256")
+          ls -lh dist/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: silo-linux-amd64
-          path: silo
+          name: silo-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lh dist/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
