@@ -1,11 +1,20 @@
 name: golangci-lint
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
 
 permissions:
   contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
-  # pull-requests: read
+
+# If a tag push and a branch push land close together on the same
+# commit (typical when cutting a release: `git push` then `git push
+# --tags`), collapse to a single lint run for that commit.
+concurrency:
+  group: lint-${{ github.sha }}
+  cancel-in-progress: true
 
 jobs:
   golangci-silo:
@@ -19,7 +28,11 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
+          # goinstall builds golangci-lint from source using the runner's
+          # Go toolchain, so it stays compatible with our go.mod's Go
+          # version instead of the prebuilt binary's (which lags behind).
           version: latest
+          install-mode: goinstall
           args: --timeout=5m
   golangci-notification-server:
     name: lint notification-server
