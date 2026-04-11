@@ -157,4 +157,4 @@ python/            Legacy Seahub code — not used
 
 Silo started as a fork of [haiwen/seafile-server](https://github.com/haiwen/seafile-server). It reuses the on-disk format, database schema, and wire protocol so that upstream clients keep working.
 
-Licensed under **AGPLv3**, inherited from the upstream project. See [`README.markdown`](README.markdown) for the original upstream Seafile server description.
+Licensed under **AGPLv3**, inherited from the upstream project. See [`NOTICE`](NOTICE) for attribution and [`LICENSE.txt`](LICENSE.txt) for the full license text.
