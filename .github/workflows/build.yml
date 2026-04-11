@@ -27,10 +27,7 @@ jobs:
         # -p 1: several fileserver test packages share /tmp/conf/seafile-data
         # with the same repo ID, so parallel package execution races. Proper
         # fix is t.TempDir() in those tests.
-        #
-        # -skip TestSQLiteReadWriteSplit: pre-existing dbutil failure
-        # (read-only connection permits writes).
-        run: go test -p 1 -skip '^TestSQLiteReadWriteSplit$' ./...
+        run: go test -p 1 ./...
 
   build:
     needs: test
