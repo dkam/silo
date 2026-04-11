@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -229,22 +230,15 @@ func Run(args []string) error {
 	}
 
 	if pidFilePath != "" {
-		if writePidFile(pidFilePath) != nil {
-			log.Fatal("write pid file failed.")
+		if err := writePidFile(pidFilePath); err != nil {
+			log.Fatalf("Failed to write pid file %s: %v", pidFilePath, err)
 		}
-	}
-	_, err := os.Stat(centralDir)
-	if os.IsNotExist(err) {
-		log.Fatalf("central config directory %s doesn't exist: %v.", centralDir, err)
 	}
 
 	if dataDir == "" {
 		log.Fatal("seafile data directory must be specified.")
 	}
-	_, err = os.Stat(dataDir)
-	if os.IsNotExist(err) {
-		log.Fatalf("seafile data directory %s doesn't exist: %v.", dataDir, err)
-	}
+	var err error
 	absDataDir, err = filepath.Abs(dataDir)
 	if err != nil {
 		log.Fatalf("Failed to convert seafile data dir to absolute path: %v.", err)

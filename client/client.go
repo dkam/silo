@@ -283,16 +283,18 @@ func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
 // It creates an access token, then POSTs a multipart form to /upload-api/.
 func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {
 	// Step 1: Create access token with op=upload
-	objID, _ := json.Marshal(map[string]string{"parent_dir": parentDir})
+	objID, err := json.Marshal(map[string]string{"parent_dir": parentDir})
+	if err != nil {
+		return fmt.Errorf("failed to marshal upload obj_id: %v", err)
+	}
 	var tokenResp struct {
 		Token string `json:"token"`
 	}
-	err := c.doRequest("POST", "/api/v1/access-tokens", map[string]interface{}{
+	if err := c.doRequest("POST", "/api/v1/access-tokens", map[string]interface{}{
 		"repo_id": repoID,
 		"obj_id":  string(objID),
 		"op":      "upload",
-	}, &tokenResp)
-	if err != nil {
+	}, &tokenResp); err != nil {
 		return fmt.Errorf("failed to get upload token: %v", err)
 	}
 
