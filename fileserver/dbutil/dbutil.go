@@ -146,7 +146,16 @@ func OpenSQLite(path string) (*DBPair, error) {
 		}
 	}
 
-	readDSN := fmt.Sprintf("file:%s?_pragma=journal_mode%%3DWAL&_pragma=busy_timeout%%3D5000&_pragma=synchronous%%3DNORMAL&_pragma=foreign_keys%%3DON", path)
+	// Read connection uses PRAGMA query_only=ON so any accidental write
+	// via pair.Read fails loudly with SQLITE_READONLY. We deliberately do
+	// NOT use URI mode=ro here — a previous attempt (commit d6ec679) had
+	// to back that out because true read-only opens interact badly with
+	// WAL shared-memory setup and prepared statements. query_only is
+	// enforced at the engine level after a normal read-write open, so
+	// WAL/shm/prepared statements all behave as usual while writes still
+	// get rejected. The _pragma= DSN parameter applies on every new pool
+	// connection, so it persists across the connection pool.
+	readDSN := fmt.Sprintf("file:%s?_pragma=journal_mode%%3DWAL&_pragma=busy_timeout%%3D5000&_pragma=synchronous%%3DNORMAL&_pragma=foreign_keys%%3DON&_pragma=query_only%%3DON", path)
 	readDB, err := sql.Open("sqlite", readDSN)
 	if err != nil {
 		writeDB.Close()
