@@ -1,28 +1,280 @@
 # Future Features
 
-## User Management API
+Rough roadmap for Silo. Ordered loosely by priority, but nothing here is committed.
 
-Currently users can only be created via env vars on startup (`SEAFILE_ADMIN_EMAIL`/`SEAFILE_ADMIN_PASSWORD`) or direct DB insert. Need proper API endpoints:
+## In Progress
 
-- `POST /api/v1/users` - create user
-- `GET /api/v1/users` - list users
-- `DELETE /api/v1/users/{email}` - delete user
-- `PUT /api/v1/users/{email}` - update user (password, active status)
+### Notification Server
+
+SeaDrive currently falls back to polling because Silo has no notification
+endpoint. Upstream Seafile ships a separate `notification-server` binary that
+clients connect to over WebSocket and subscribe to repo change events.
+
+Work started under `fileserver/notif/` (`event.go`, `subscriptions.go`). Goal
+is an in-process WebSocket endpoint that:
+
+- Accepts client connections with a repo token.
+- Lets a client subscribe to one or more `repo_id`s it has access to.
+- Publishes `repo-update` events whenever a commit lands (hook into
+  `repomgr` / commit creation path).
+- Keeps per-connection subscription state in memory; no persistence needed.
+
+Compatibility target: the same JSON-over-WebSocket frame format that SeaDrive
+3.x expects from upstream `notification-server`, so no client changes.
+
+## User Management
+
+Currently users can only be created via env vars on startup
+(`SEAFILE_ADMIN_EMAIL` / `SEAFILE_ADMIN_PASSWORD`) or by writing directly to
+the `EmailUser` table. We need a proper admin-gated API.
+
+### Endpoints
+
+- `POST   /api/v1/users`              — create user
+- `GET    /api/v1/users`              — list users (paginated)
+- `GET    /api/v1/users/{email}`      — show a single user
+- `PUT    /api/v1/users/{email}`      — update password, active flag, is_staff
+- `DELETE /api/v1/users/{email}`      — delete user (and their owned repos? or
+                                         refuse if non-empty?)
+- `POST   /api/v1/users/{email}/password` — admin password reset
+- `POST   /api/v1/auth/change-password`   — self-service password change
 
 ### Prerequisites
 
-- **Admin check helper**: query `is_staff` from `EmailUser` for the authenticated user
-- **Admin middleware or per-handler guard**: gate user management endpoints behind `is_staff=1`
-- Decide: should `is_staff` also grant all-repo visibility in `CheckPerm` and `ListReposHandler`?
+- **Admin check helper**: query `is_staff` from `EmailUser` for the authed user.
+- **Admin middleware** (or per-handler guard): gate `/api/v1/users/*` behind
+  `is_staff = 1`. Cache the flag on the JWT claim so we don't hit the DB on
+  every request.
+- Decide: should `is_staff` also grant all-repo visibility in `CheckPerm` and
+  `ListReposHandler`? Upstream conflates "admin" with "can see everything";
+  we may want a cleaner split.
+- Decide: soft-delete vs hard-delete. Upstream keeps orphaned repos around
+  after a user is removed; we should pick a deterministic policy.
 
-## Repo Sharing API
+### Prevent Repo Creation For Non-Admin Users
 
-Users can only access repos they own. No way to share repos through the API yet.
+Seafile has no built-in way to stop a regular user from creating libraries.
+For "consumer" deployments where only the admin curates libraries and other
+users sync shared ones, we need a flag (per-user or global) that makes
+`CreateRepoHandler` return 403 for non-staff.
 
-- `POST /api/v1/repos/{id}/shares` - share repo to user/group
-- `GET /api/v1/repos/{id}/shares` - list shares
-- `DELETE /api/v1/repos/{id}/shares/{email}` - revoke share
+Likely shape: a `role` column on `EmailUser` (`admin` / `user` / `guest`) and
+a config key `allow_user_create_repo = true|false`. Guest == can't create, can
+only access shared repos.
 
-## Prevent Repo Creation for Non-Admin Users
+## Repo Sharing
 
-Seafile has no built-in way to prevent a regular user from creating repos. If we want "view-only" accounts that can only access shared repos, we need a flag or role check in `CreateRepoHandler`.
+Share tables (`SharedRepo`, `SharedRepoV2`, `RepoGroup`) already exist in the
+schema — they're just not exposed over HTTP. Once user management lands,
+sharing should be straightforward.
+
+### Endpoints
+
+- `POST   /api/v1/repos/{id}/shares`              — share to a user
+- `GET    /api/v1/repos/{id}/shares`              — list shares on a repo
+- `DELETE /api/v1/repos/{id}/shares/{email}`      — revoke a user share
+- `POST   /api/v1/repos/{id}/group-shares`        — share to a group
+- `GET    /api/v1/repos/{id}/group-shares`
+- `DELETE /api/v1/repos/{id}/group-shares/{gid}`
+- `GET    /api/v1/shared-with-me`                 — repos shared *to* the caller
+
+### Permissions
+
+Seafile supports three permission levels: `r` (read), `rw` (read-write), and
+`admin`. `CheckPerm` already knows how to resolve these from the share tables
+— the missing piece is the write path plus exposing the result in
+`ListReposHandler` (so a shared repo shows up alongside owned ones).
+
+### Public / link shares
+
+Later: public download links (`/d/{token}/`) and upload links. These need a
+new token type in `tokenstore`, a generated short-code, and optional password
+protection. Lower priority than user-to-user sharing.
+
+## Groups
+
+Silo already has a `Group` table inherited from ccnet but no way to manage it.
+To make group sharing useful we need:
+
+- `POST   /api/v1/groups`                          — create group
+- `GET    /api/v1/groups`                          — list groups the caller is in
+- `GET    /api/v1/groups/{id}`
+- `DELETE /api/v1/groups/{id}`                     — owner only
+- `POST   /api/v1/groups/{id}/members`             — add member
+- `DELETE /api/v1/groups/{id}/members/{email}`     — remove member
+- `PUT    /api/v1/groups/{id}/members/{email}`     — promote/demote
+
+Group membership should participate in `CheckPerm` via the existing
+`RepoGroup` table.
+
+## File Locking
+
+Seafile supports per-file advisory locks so two clients editing the same
+document don't clobber each other. SeaDrive and Seafile Desktop both honour
+the lock state when present. Tables `FileLocks` and `FileLocksTimestamp` exist
+in the schema.
+
+### Endpoints
+
+- `PUT    /api2/repos/{id}/file/?p=/path&operation=lock`
+- `PUT    /api2/repos/{id}/file/?p=/path&operation=unlock`
+- `GET    /api2/repos/{id}/locked-files/`
+
+### Behaviour
+
+- Lock owner is the authenticated user; a lock blocks writes from any other
+  user until released or expired.
+- Two lock types upstream: **manual** (no expiry, explicit unlock) and
+  **auto** (short TTL, refreshed on each save). Start with manual, add auto
+  later.
+- Enforcement point: `put-file` / `update-file` / `commit` upload path in
+  `fileop.go` — reject with 403 if the target path is locked by someone else.
+- Surface lock state in directory listings (`is_locked`, `lock_owner`,
+  `lock_time`) so clients render a padlock icon.
+
+### Ties into the notification server
+
+Locks are the clearest case for pushing events over the notification
+WebSocket instead of relying on poll-then-list. When a lock is taken or
+released, publish a `file-lock-changed` event (same frame shape upstream
+uses, so SeaDrive handles it without changes) to every subscriber of the
+repo. Clients repaint the padlock icon immediately rather than waiting for
+the next directory refresh.
+
+This means file locking should land *after* the notification server is
+working — or at least the server-side publish hook should be added at the
+same time so we don't ship a half-real-time feature.
+
+## Trash, History, Revisions
+
+Commits are already content-addressable and immutable, so "history" is mostly
+a matter of exposing what's already on disk. Upstream endpoints to port:
+
+- `GET  /api2/repos/{id}/history/`                  — commit log for the repo
+- `GET  /api2/repos/{id}/file/revision/?p=/path`    — revisions of a single file
+- `POST /api2/repos/{id}/file/revert/`              — revert a file to a commit
+- `GET  /api2/repos/{id}/trash/`                    — deleted-but-reachable entries
+- `POST /api2/repos/{id}/trash/restore/`            — restore from trash
+- `DELETE /api2/repos/{id}/trash/`                  — empty trash
+
+Trash is interesting because Silo currently has no GC — "deleted" files are
+still reachable via old commits forever. A real trash needs a retention
+window and a GC pass that prunes commits older than the window.
+
+## Garbage Collection
+
+Related to trash: there's no block GC. If you delete a 10 GB file, the blocks
+stay on disk indefinitely under `{data-dir}/storage/blocks/`. Need a
+`silo gc` subcommand (or background job) that:
+
+1. Walks reachable commits per repo (`commitmgr.Load` from each repo's head,
+   following parents), collecting the live fs-object and block set via
+   `fsmgr`.
+2. Scans `storage/blocks/{store_id}/` and removes anything not in the live
+   set. Same pass for `storage/fs/` and `storage/commits/` for entries older
+   than the head chain.
+3. Respects a retention window so trash/history still works — a block
+   referenced by any commit within the window is live.
+
+Should run per repo (one repo can be GC'd without locking the whole server)
+and must coordinate with in-flight uploads so a block that's written but not
+yet committed isn't reaped. Upstream does this via a "fs-mgr freeze" flag;
+we'd do something similar.
+
+## Quota
+
+Quota is **per user**, not per repo — a user's cap applies to the total size
+of every repo they own. The logic is in `fileserver/quota.go` but isn't
+enforced on the upload path today, and there's no API to set a user's cap.
+
+### How it works
+
+- `UserQuota(user, quota)` table holds the cap in bytes. No row → use
+  `option.DefaultQuota` (settable via `seafile.conf`, `fileserver/option/`).
+- `-2` (`InfiniteQuota`, `quota.go:14`) means unlimited.
+- `getUserUsage` (`quota.go:83-105`) sums `RepoSize.size` across every repo
+  the user owns via a join on `RepoOwner`, **excluding virtual repos**
+  (`AND v.repo_id IS NULL`) so subdirectory-shares don't double-count.
+- `checkQuota(repoID, delta)` (`quota.go:17-62`) is called with the
+  projected upload size. For a virtual repo, it first resolves to the
+  origin repo and charges the origin's owner — so uploading to a shared
+  subdirectory counts against whoever created the parent library, not the
+  uploader.
+- `RepoSize` is maintained asynchronously by `size_sched.go` → the
+  `updateSizePool` worker, which recomputes after each commit. Quota
+  decisions are therefore eventually consistent; a fast series of uploads
+  can momentarily overshoot.
+
+### What's missing
+
+- **Enforcement wiring**: `checkQuota` is defined but the upload path in
+  `fileop.go` doesn't consistently short-circuit on a quota violation with
+  the right HTTP status. Needs to return `443 QUOTA_FULL` (Seafile-specific
+  code already present in `http_code.go`) before the block write, not
+  after.
+- **Admin API**: no endpoints to read or set quota. Wanted:
+  - `GET /api/v1/users/{email}/quota` — returns `{quota, usage}`
+  - `PUT /api/v1/users/{email}/quota` — set cap (admin only)
+  - `GET /api/v1/account/quota` — self lookup, no admin needed
+- **Default quota config**: surface `option.DefaultQuota` as an env var
+  (`SEAFILE_DEFAULT_QUOTA`) so it's settable without editing
+  `seafile.conf`.
+- **Per-repo quota** (extension, not upstream-compatible): there's no
+  `RepoQuota` table in the schema. For "this shared team library can grow
+  to 500 GB regardless of who owns it" we'd need to add one and have
+  `checkQuota` consult it alongside the user cap, taking the smaller of
+  the two.
+- **Grace behaviour**: decide what happens *at* the cap — upstream refuses
+  any further writes outright. A soft-limit / hard-limit split would be
+  friendlier but is more work.
+
+## Encrypted Repos In The TUI
+
+Sync clients can already use encrypted repos — the server-side decrypt-key
+cache (`keycache/`) supports them. The TUI doesn't prompt for a password or
+decrypt blocks locally, so browsing an encrypted repo in `silo tui` just
+shows garbage. Needs:
+
+- Password prompt on `enter` when `repo.encrypted = 1`.
+- Client-side key derivation (match upstream's PBKDF2 params).
+- Decrypt blocks on download, encrypt on upload.
+
+## Web UI
+
+Not planned in the short term. Upstream's Seahub is a Django app and we
+explicitly walked away from that. If a web UI happens, it should be a small
+SPA (HTMX or similar) served from the same Go binary, talking to `/api/v1/`.
+
+## Admin / Ops
+
+- **Structured logs**: switch from stdlib `log` to `slog` with a JSON handler
+  behind a flag. Useful for shipping to Loki/ES.
+- **Metrics**: `fileserver/metrics/` already exists; expand coverage to
+  include upload/download throughput, commit rate, and auth failures. Expose
+  on `/metrics` in Prometheus format.
+- **Healthcheck**: a real `/healthz` that pings both SQLite handles and
+  returns 503 if either is wedged.
+- **Backup story**: document the safe way to snapshot `storage/` + the two
+  SQLite files. SQLite WAL mode means `cp` is not safe during writes — need
+  `VACUUM INTO` or the online backup API.
+
+## Protocol / Client Compat Gaps
+
+Things SeaDrive or Seafile Desktop call that Silo currently stubs or 404s.
+Track them here as they're discovered:
+
+- `/api2/events/` — activity feed (returns empty list today)
+- `/api2/starred-files/`
+- `/api2/repos/{id}/commits/` — richer commit metadata than `/history/`
+- Avatar endpoints (`/api2/avatars/…`) — cosmetic, clients tolerate 404
+
+## Non-Goals
+
+Things we're explicitly *not* going to build, to keep scope honest:
+
+- **Federation / multi-server sync** — one binary, one node.
+- **Plugin system** — if you want custom behaviour, fork.
+- **LDAP / SAML / OIDC** — local password auth only. (A reverse proxy doing
+  header-auth is acceptable; Silo will trust a configurable header.)
+- **Mobile apps** — use the upstream Seafile mobile clients, they speak our
+  protocol.
