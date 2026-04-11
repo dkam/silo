@@ -180,23 +180,22 @@ func registerCA(capath string) {
 }
 
 func writePidFile(pid_file_path string) error {
-	file, err := os.OpenFile(pid_file_path, os.O_CREATE|os.O_WRONLY, 0664)
+	// O_TRUNC: a stale pidfile may be longer than the new pid string, so
+	// without truncating we'd leave junk bytes after the pid.
+	file, err := os.OpenFile(pid_file_path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	pid := os.Getpid()
-	str := fmt.Sprintf("%d", pid)
-	_, err = file.Write([]byte(str))
-
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err = fmt.Fprintf(file, "%d", os.Getpid())
+	return err
 }
 
 func removePidfile(pid_file_path string) error {
+	if pid_file_path == "" {
+		return nil
+	}
 	err := os.Remove(pid_file_path)
 	if err != nil {
 		return err
@@ -333,11 +332,6 @@ func Run(args []string) error {
 
 	router := newHTTPRouter()
 
-	go handleSignals()
-	go handleUser1Signal()
-
-	log.Print("Seafile file server started.")
-
 	httpServer = new(http.Server)
 	httpServer.Addr = fmt.Sprintf("%s:%d", option.Host, option.Port)
 	var handler http.Handler = middleware.StripSeafhttpPrefix(router)
@@ -345,6 +339,14 @@ func Run(args []string) error {
 		handler = middleware.DebugLogger(handler)
 	}
 	httpServer.Handler = handler
+
+	// Start signal handlers AFTER httpServer is fully constructed: the
+	// shutdown handler reads httpServer concurrently, and goroutine creation
+	// is the happens-before edge that makes the writes above visible.
+	go handleSignals()
+	go handleUser1Signal()
+
+	log.Print("Seafile file server started.")
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -371,11 +373,18 @@ func handleSignals() {
 		}
 	}
 
-	checkpointAndClose(seafilePair, "seafile")
-	checkpointAndClose(ccnetPair, "ccnet")
+	// Checkpoint both DBs in parallel — they're independent and a large WAL
+	// can take a noticeable fraction of a second to flush.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); checkpointAndClose(seafilePair, "seafile") }()
+	go func() { defer wg.Done(); checkpointAndClose(ccnetPair, "ccnet") }()
+	wg.Wait()
 
 	metrics.Stop()
-	removePidfile(pidFilePath)
+	if err := removePidfile(pidFilePath); err != nil {
+		log.Warnf("Failed to remove pid file: %v", err)
+	}
 
 	log.Info("shutdown complete")
 	close(shutdownDone)
@@ -385,7 +394,7 @@ func checkpointAndClose(pair *dbutil.DBPair, name string) {
 	if pair == nil {
 		return
 	}
-	if option.DBType == "sqlite" {
+	if option.DBType == dbutil.EngineSQLite {
 		if _, err := pair.Write.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			log.Warnf("%s WAL checkpoint failed: %v", name, err)
 		}

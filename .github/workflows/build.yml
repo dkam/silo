@@ -25,9 +25,16 @@ jobs:
         run: go vet ./...
 
       - name: go test
+        # -p 1 runs package tests serially. Several fileserver test packages
+        # (top-level silod, blockmgr, commitmgr) share the hardcoded path
+        # /tmp/conf/seafile-data with the same repo ID, so parallel package
+        # execution causes them to stomp on each other's files. A proper fix
+        # is to switch those tests to t.TempDir(), but for now -p 1 keeps CI
+        # deterministic.
+        #
         # TestSQLiteReadWriteSplit is a pre-existing failure in the dbutil
         # package (read-only connection permits writes); tracked separately.
-        run: go test -skip '^TestSQLiteReadWriteSplit$' ./...
+        run: go test -p 1 -skip '^TestSQLiteReadWriteSplit$' ./...
 
       - name: Compute version
         id: version
