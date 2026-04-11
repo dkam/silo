@@ -34,6 +34,15 @@ const (
 type Client struct {
 	ID uint64
 
+	// User is the authenticated Seafile username, set on the first
+	// successful subscribe from the JWT claims. It is unused today (only
+	// repo-update events flow, and those fan out to every subscriber of a
+	// repo), but will be needed when per-user events like
+	// folder-perm-changed are added — the upstream notification server
+	// filters fanout by this field. See notification-server/event.go for
+	// the upstream pattern.
+	User string
+
 	conn   *websocket.Conn
 	connMu sync.Mutex // serializes writes to conn
 	wch    chan *Message
@@ -206,12 +215,12 @@ func (c *Client) handleMessage(msg *Message) error {
 			return fmt.Errorf("bad subscribe frame: %w", err)
 		}
 		for _, r := range frame.Repos {
-			exp, ok := parseNotifToken(r.Token, r.RepoID)
+			user, exp, ok := parseNotifToken(r.Token, r.RepoID)
 			if !ok {
 				c.sendJWTExpired(r.RepoID)
 				continue
 			}
-			c.subscribe(r.RepoID, exp)
+			c.subscribe(r.RepoID, user, exp)
 		}
 		return nil
 	case "unsubscribe":
@@ -228,13 +237,16 @@ func (c *Client) handleMessage(msg *Message) error {
 	}
 }
 
-func (c *Client) subscribe(repoID string, exp int64) {
+func (c *Client) subscribe(repoID, user string, exp int64) {
 	c.reposMu.Lock()
 	if c.repos == nil {
 		c.reposMu.Unlock()
 		return
 	}
 	c.repos[repoID] = exp
+	if c.User == "" {
+		c.User = user
+	}
 	c.reposMu.Unlock()
 	addSubscription(repoID, c)
 }
@@ -259,25 +271,25 @@ func (c *Client) sendJWTExpired(repoID string) {
 }
 
 // parseNotifToken validates a repo-scoped notification JWT. On success it
-// returns the expiry (unix seconds) and true.
-func parseNotifToken(tokenString, repoID string) (int64, bool) {
+// returns the claimed username, expiry (unix seconds), and true.
+func parseNotifToken(tokenString, repoID string) (string, int64, bool) {
 	if tokenString == "" {
-		return 0, false
+		return "", 0, false
 	}
 	claims := &notifClaims{}
 	tok, err := jwt.ParseWithClaims(tokenString, claims, func(*jwt.Token) (any, error) {
 		return []byte(option.JWTPrivateKey), nil
 	})
 	if err != nil || !tok.Valid {
-		return 0, false
+		return "", 0, false
 	}
 	if claims.RepoID != repoID {
-		return 0, false
+		return "", 0, false
 	}
 	if claims.Exp <= time.Now().Unix() {
-		return 0, false
+		return "", 0, false
 	}
-	return claims.Exp, true
+	return claims.UserName, claims.Exp, true
 }
 
 // notifClaims is local to notif to keep the package free of a dependency on
