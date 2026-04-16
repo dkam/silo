@@ -38,9 +38,10 @@ trees, and deduplicated blocks.
   - `GET /api/v2.1/internal/check-share-link-access/` — public share link auth
   - `GET /api/v2.1/internal/user-list/` — display names for merge conflicts
 
-### notification-server (Go, ~1K LOC)
+### notification-server (Go, ~1K LOC) — now integrated into Silo
 - WebSocket server for real-time repo change notifications
 - JWT-authenticated
+- Ported to `fileserver/notif/`; standalone binary removed
 
 ### seafile-controller
 - Process manager that launches and monitors the other services

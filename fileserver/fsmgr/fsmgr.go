@@ -693,7 +693,9 @@ func getSeafdir(repoID string, dirID string, reader io.ReadCloser, useCache bool
 	}
 
 	if useCache {
-		setSeafdirToCache(repoID, seafdir)
+		if err := setSeafdirToCache(repoID, seafdir); err != nil {
+			return nil, err
+		}
 	}
 
 	return seafdir, nil

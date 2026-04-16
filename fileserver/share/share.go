@@ -163,7 +163,9 @@ func getGroupPaths(sqlStr string) (string, error) {
 
 	var path string
 	for rows.Next() {
-		rows.Scan(&path)
+		if err := rows.Scan(&path); err != nil {
+			return "", err
+		}
 		if paths == "" {
 			paths = path
 		} else {

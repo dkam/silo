@@ -2,26 +2,6 @@
 
 Rough roadmap for Silo. Ordered loosely by priority, but nothing here is committed.
 
-## In Progress
-
-### Notification Server
-
-SeaDrive currently falls back to polling because Silo has no notification
-endpoint. Upstream Seafile ships a separate `notification-server` binary that
-clients connect to over WebSocket and subscribe to repo change events.
-
-Work started under `fileserver/notif/` (`event.go`, `subscriptions.go`). Goal
-is an in-process WebSocket endpoint that:
-
-- Accepts client connections with a repo token.
-- Lets a client subscribe to one or more `repo_id`s it has access to.
-- Publishes `repo-update` events whenever a commit lands (hook into
-  `repomgr` / commit creation path).
-- Keeps per-connection subscription state in memory; no persistence needed.
-
-Compatibility target: the same JSON-over-WebSocket frame format that SeaDrive
-3.x expects from upstream `notification-server`, so no client changes.
-
 ## User Management
 
 Currently users can only be created via env vars on startup

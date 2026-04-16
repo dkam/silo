@@ -34,17 +34,3 @@ jobs:
           version: latest
           install-mode: goinstall
           args: --timeout=5m
-  golangci-notification-server:
-    name: lint notification-server
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: ./notification-server
-          args: --timeout=5m

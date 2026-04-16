@@ -251,7 +251,9 @@ func DiffMergeRoots(storeID, mergedRoot, p1Root, p2Root string, results *[]*Diff
 		return err
 	}
 
-	diffResolveRenames(results)
+	if err := diffResolveRenames(results); err != nil {
+		return fmt.Errorf("failed to resolve renames: %v", err)
+	}
 
 	return nil
 }
@@ -313,7 +315,9 @@ func DiffCommitRoots(storeID, p1Root, p2Root string, results *[]*DiffEntry, fold
 		return err
 	}
 
-	diffResolveRenames(results)
+	if err := diffResolveRenames(results); err != nil {
+		return fmt.Errorf("failed to resolve renames: %v", err)
+	}
 
 	return nil
 }
@@ -338,7 +342,9 @@ func DiffCommits(commit1, commit2 *commitmgr.Commit, results *[]*DiffEntry, fold
 		return err
 	}
 
-	diffResolveRenames(results)
+	if err := diffResolveRenames(results); err != nil {
+		return fmt.Errorf("failed to resolve renames: %v", err)
+	}
 
 	return nil
 }

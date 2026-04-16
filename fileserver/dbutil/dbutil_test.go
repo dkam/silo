@@ -385,17 +385,17 @@ func TestSQLiteWriteTransactionNoHang(t *testing.T) {
 		}
 		var head string
 		if err := tx.QueryRowContext(ctx, "SELECT commit_id FROM branch WHERE repo = ?", "r1").Scan(&head); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			done <- fmt.Errorf("select in tx: %w", err)
 			return
 		}
 		if head != "c0" {
-			tx.Rollback()
+			_ = tx.Rollback()
 			done <- fmt.Errorf("unexpected head %q", head)
 			return
 		}
 		if _, err := tx.ExecContext(ctx, "UPDATE branch SET commit_id = ? WHERE repo = ? AND commit_id = ?", "c1", "r1", head); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			done <- fmt.Errorf("update in tx: %w", err)
 			return
 		}

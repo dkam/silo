@@ -129,8 +129,8 @@ not applicable to our single-binary standalone model.
 
 | Path | Normally provided by | Our behavior | Client impact |
 |---|---|---|---|
-| `/notification/ping` | `notification-server` daemon | 404 | SeaDrive falls back to polling. Fine. |
-| `/notification/events` (or similar) | `notification-server` | 404 | As above |
+| ~~/notification/ping~~ | Integrated into Silo (`fileserver/notif`) | Handled | — |
+| ~~/notification/events~~ | Integrated into Silo (`fileserver/notif`) | Handled | — |
 | Anything else under `/api2/` we haven't listed | Seahub | 404 | Logged as WARN so new SeaDrive releases are easy to catch |
 | Anything under `/api/v2.1/` | Seahub REST API v2.1 | 404 | No tested client uses this yet |
 
