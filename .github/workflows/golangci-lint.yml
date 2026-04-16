@@ -26,11 +26,8 @@ jobs:
         with:
           go-version-file: go.mod
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          # goinstall builds golangci-lint from source using the runner's
-          # Go toolchain, so it stays compatible with our go.mod's Go
-          # version instead of the prebuilt binary's (which lags behind).
           version: latest
           install-mode: goinstall
           args: --timeout=5m

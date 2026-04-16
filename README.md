@@ -74,6 +74,27 @@ go build ./cmd/silo
 
 This produces a `silo` executable (~20 MB) that contains the file server daemon, the interactive TUI, and the scripting CLI.
 
+### Docker
+
+Build and run directly from GitHub — no clone needed:
+
+```bash
+docker build -t silo https://github.com/dkam/silo.git
+docker run -d -p 8082:8082 -v silo-data:/data \
+  -e SILO_ADMIN_EMAIL=admin@example.com \
+  -e SILO_ADMIN_PASSWORD=changeme \
+  silo
+```
+
+Multi-arch images (linux/amd64, linux/arm64) are also published to GitHub Container Registry on each release:
+
+```bash
+docker run -d -p 8082:8082 -v silo-data:/data \
+  -e SILO_ADMIN_EMAIL=admin@example.com \
+  -e SILO_ADMIN_PASSWORD=changeme \
+  ghcr.io/dkam/silo:latest
+```
+
 ### Run the server
 
 ```bash
