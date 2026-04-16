@@ -29,18 +29,13 @@ func IsObjectIDValid(objID string) bool {
 }
 
 type SeahubClaims struct {
-	Exp        int64 `json:"exp"`
-	IsInternal bool  `json:"is_internal"`
+	IsInternal bool `json:"is_internal"`
 	jwt.RegisteredClaims
-}
-
-func (*SeahubClaims) Valid() error {
-	return nil
 }
 
 func GenSeahubJWTToken() (string, error) {
 	claims := new(SeahubClaims)
-	claims.Exp = time.Now().Add(time.Second * 300).Unix()
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Second * 300))
 	claims.IsInternal = true
 
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), claims)
@@ -54,19 +49,14 @@ func GenSeahubJWTToken() (string, error) {
 }
 
 type MyClaims struct {
-	Exp      int64  `json:"exp"`
 	RepoID   string `json:"repo_id"`
 	UserName string `json:"username"`
 	jwt.RegisteredClaims
 }
 
-func (*MyClaims) Valid() error {
-	return nil
-}
-
 func GenNotifJWTToken(repoID, user string, exp int64) (string, error) {
 	claims := new(MyClaims)
-	claims.Exp = exp
+	claims.ExpiresAt = jwt.NewNumericDate(time.Unix(exp, 0))
 	claims.RepoID = repoID
 	claims.UserName = user
 

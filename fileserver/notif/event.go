@@ -2,7 +2,6 @@ package notif
 
 import (
 	"encoding/json"
-	"runtime/debug"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -44,19 +43,11 @@ func NotifyRepoUpdate(repoID, commitID string) {
 	}
 	msg := &Message{Type: EventTypeRepoUpdate, Content: content}
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Errorf("notif: panic in fanout: %v\n%s", r, debug.Stack())
-			}
-		}()
-		for _, c := range targets {
-			select {
-			case c.wch <- msg:
-			default:
-				// Slow consumer: drop rather than block the commit path.
-				log.Debugf("notif: dropping repo-update for slow client %d", c.ID)
-			}
+	for _, c := range targets {
+		select {
+		case c.wch <- msg:
+		default:
+			log.Debugf("notif: dropping repo-update for slow client %d", c.ID)
 		}
-	}()
+	}
 }

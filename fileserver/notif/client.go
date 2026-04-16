@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/dkam/silo/fileserver/option"
+	"github.com/dkam/silo/fileserver/utils"
 )
 
 const (
@@ -233,7 +234,8 @@ func (c *Client) handleMessage(msg *Message) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("unexpected message type %q", msg.Type)
+		log.Debugf("notif: client %d: ignoring unknown message type %q", c.ID, msg.Type)
+		return nil
 	}
 }
 
@@ -276,7 +278,7 @@ func parseNotifToken(tokenString, repoID string) (string, int64, bool) {
 	if tokenString == "" {
 		return "", 0, false
 	}
-	claims := &notifClaims{}
+	claims := &utils.MyClaims{}
 	tok, err := jwt.ParseWithClaims(tokenString, claims, func(*jwt.Token) (any, error) {
 		return []byte(option.JWTPrivateKey), nil
 	})
@@ -286,20 +288,9 @@ func parseNotifToken(tokenString, repoID string) (string, int64, bool) {
 	if claims.RepoID != repoID {
 		return "", 0, false
 	}
-	if claims.Exp <= time.Now().Unix() {
+	exp, err := claims.GetExpirationTime()
+	if err != nil || exp == nil || exp.Before(time.Now()) {
 		return "", 0, false
 	}
-	return claims.UserName, claims.Exp, true
+	return claims.UserName, exp.Unix(), true
 }
-
-// notifClaims is local to notif to keep the package free of a dependency on
-// fileserver/utils. Mirrors the shape of utils.MyClaims, which is what
-// GenNotifJWTToken in sync_api.go produces.
-type notifClaims struct {
-	Exp      int64  `json:"exp"`
-	RepoID   string `json:"repo_id"`
-	UserName string `json:"username"`
-	jwt.RegisteredClaims
-}
-
-func (*notifClaims) Valid() error { return nil }
