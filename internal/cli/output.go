@@ -51,4 +51,3 @@ func printDirText(w io.Writer, entries []client.DirEntry) {
 		fmt.Fprintf(w, "%s  %10s  %-16s  %s\n", kind, size, mtime, e.Name)
 	}
 }
-

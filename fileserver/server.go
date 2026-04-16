@@ -18,9 +18,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-	"github.com/gorilla/mux"
-	"github.com/dkam/silo/internal/xdg"
 	"github.com/dkam/silo/fileserver/api"
 	"github.com/dkam/silo/fileserver/apitokenstore"
 	"github.com/dkam/silo/fileserver/authmgr"
@@ -37,6 +34,9 @@ import (
 	"github.com/dkam/silo/fileserver/share"
 	"github.com/dkam/silo/fileserver/tokenstore"
 	"github.com/dkam/silo/fileserver/utils"
+	"github.com/dkam/silo/internal/xdg"
+	"github.com/go-sql-driver/mysql"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 
 	"net/http/pprof"
@@ -254,9 +254,12 @@ func Run(args []string) error {
 	// Resolve config file: -C flag > XDG config home > none
 	if configFile == "" {
 		if xdgConf, err := xdg.ConfigHome("silo"); err == nil {
-			candidate := filepath.Join(xdgConf, "seafile.conf")
-			if _, err := os.Stat(candidate); err == nil {
-				configFile = candidate
+			for _, name := range []string{"silo.conf", "seafile.conf"} {
+				candidate := filepath.Join(xdgConf, name)
+				if _, err := os.Stat(candidate); err == nil {
+					configFile = candidate
+					break
+				}
 			}
 		}
 	}
@@ -340,7 +343,7 @@ func Run(args []string) error {
 
 	httpServer = new(http.Server)
 	httpServer.Addr = fmt.Sprintf("%s:%d", option.Host, option.Port)
-	var handler http.Handler = middleware.StripSeafhttpPrefix(router)
+	var handler = middleware.StripSeafhttpPrefix(router)
 	if debugLog {
 		handler = middleware.DebugLogger(handler)
 	}

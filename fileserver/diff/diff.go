@@ -48,7 +48,7 @@ func DiffTrees(roots []string, opt *DiffOptions) error {
 	for i := 0; i < n; i++ {
 		root, err := fsmgr.GetSeafdirWithZlibReader(opt.RepoID, roots[i], opt.Reader)
 		if err != nil {
-			err := fmt.Errorf("Failed to find dir %s:%s", opt.RepoID, roots[i])
+			err := fmt.Errorf("failed to find dir %s:%s", opt.RepoID, roots[i])
 			return err
 		}
 		trees[i] = root
@@ -173,7 +173,7 @@ func diffDirectories(baseDir string, dents []*fsmgr.SeafDirent, opt *DiffOptions
 		if dents[i] != nil && fsmgr.IsDir(dents[i].Mode) {
 			dir, err := fsmgr.GetSeafdirWithZlibReader(opt.RepoID, dents[i].ID, opt.Reader)
 			if err != nil {
-				err := fmt.Errorf("Failed to find dir %s:%s", opt.RepoID, dents[i].ID)
+				err := fmt.Errorf("failed to find dir %s:%s", opt.RepoID, dents[i].ID)
 				return err
 			}
 			subDirs[i] = dir

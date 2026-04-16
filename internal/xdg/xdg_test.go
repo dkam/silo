@@ -2,6 +2,7 @@ package xdg
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,11 +24,9 @@ func TestDataHome(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if filepath.Base(filepath.Dir(filepath.Dir(got))) != "share" {
-			// Just verify it ends with .local/share/silo
-		}
-		if filepath.Base(got) != "silo" {
-			t.Errorf("got %q, want path ending in /silo", got)
+		want := filepath.Join(".local", "share", "silo")
+		if !strings.HasSuffix(got, want) {
+			t.Errorf("got %q, want path ending in %q", got, want)
 		}
 	})
 }
@@ -50,8 +49,9 @@ func TestConfigHome(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if filepath.Base(got) != "silo" {
-			t.Errorf("got %q, want path ending in /silo", got)
+		want := filepath.Join(".config", "silo")
+		if !strings.HasSuffix(got, want) {
+			t.Errorf("got %q, want path ending in %q", got, want)
 		}
 	})
 }

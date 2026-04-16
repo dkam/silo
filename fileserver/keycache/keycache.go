@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	KeyExpireTime   = 3600            // 1 hour
-	ReaperInterval  = 60 * time.Second
+	KeyExpireTime  = 3600 // 1 hour
+	ReaperInterval = 60 * time.Second
 )
 
 type DecryptKey struct {

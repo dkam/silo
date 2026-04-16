@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	TokenExpireTime = 3600           // 1 hour
+	TokenExpireTime = 3600 // 1 hour
 	CleanupInterval = 5 * time.Minute
 )
 

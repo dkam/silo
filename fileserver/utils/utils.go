@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dkam/silo/fileserver/option"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/dkam/silo/fileserver/option"
 )
 
 func IsValidUUID(u string) bool {

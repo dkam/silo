@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto/z"
-	"github.com/go-redis/redis/v8"
 	"github.com/dkam/silo/fileserver/option"
+	"github.com/go-redis/redis/v8"
 
 	log "github.com/sirupsen/logrus"
 )

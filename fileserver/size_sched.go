@@ -11,13 +11,13 @@ import (
 
 	"database/sql"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/dkam/silo/fileserver/commitmgr"
 	"github.com/dkam/silo/fileserver/diff"
 	"github.com/dkam/silo/fileserver/fsmgr"
 	"github.com/dkam/silo/fileserver/option"
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/workerpool"
+	"github.com/go-redis/redis/v8"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -30,7 +30,7 @@ var updateSizePool *workerpool.WorkPool
 var redisClient *redis.Client
 
 func sizeSchedulerInit() {
-	var n int = 1
+	var n = 1
 	seafileConfPath := configFile
 	if _, err := os.Stat(seafileConfPath); err == nil {
 		config, err := ini.Load(seafileConfPath)
@@ -106,13 +106,14 @@ func computeRepoSize(args ...interface{}) error {
 		}
 
 		for _, de := range results {
-			if de.Status == diff.DiffStatusDeleted {
+			switch de.Status {
+			case diff.DiffStatusDeleted:
 				changeSize -= de.Size
 				changeFileCount--
-			} else if de.Status == diff.DiffStatusAdded {
+			case diff.DiffStatusAdded:
 				changeSize += de.Size
 				changeFileCount++
-			} else if de.Status == diff.DiffStatusModified {
+			case diff.DiffStatusModified:
 				changeSize = changeSize + de.Size - de.OriginSize
 			}
 		}

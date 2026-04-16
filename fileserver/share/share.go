@@ -104,7 +104,7 @@ func getGroupsByUser(userName string, returnAncestors bool) ([]group, error) {
 		groupTableName)
 	groups, err := getUserGroups(sqlStr, userName)
 	if err != nil {
-		err := fmt.Errorf("Failed to get groups by user %s: %v", userName, err)
+		err := fmt.Errorf("failed to get groups by user %s: %v", userName, err)
 		return nil, err
 	}
 	if !returnAncestors {
@@ -134,7 +134,7 @@ func getGroupsByUser(userName string, returnAncestors bool) ([]group, error) {
 			log.Errorf("Failed to get group paths: %v", err)
 		}
 		if paths == "" {
-			err := fmt.Errorf("Failed to get groups path for user %s", userName)
+			err := fmt.Errorf("failed to get groups path for user %s", userName)
 			return nil, err
 		}
 
@@ -200,7 +200,7 @@ func checkGroupPermByUser(repoID string, userName string) (string, error) {
 	defer cancel()
 	rows, err := seafileDB.QueryContext(ctx, sqlBuilder.String(), repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get group permission by user %s: %v", userName, err)
+		err := fmt.Errorf("failed to get group permission by user %s: %v", userName, err)
 		return "", err
 	}
 
@@ -219,7 +219,7 @@ func checkGroupPermByUser(repoID string, userName string) (string, error) {
 	}
 
 	if err := rows.Err(); err != nil {
-		err := fmt.Errorf("Failed to get group permission for user %s: %v", userName, err)
+		err := fmt.Errorf("failed to get group permission for user %s: %v", userName, err)
 		return "", err
 	}
 
@@ -235,7 +235,7 @@ func checkSharedRepoPerm(repoID string, email string) (string, error) {
 	var perm string
 	if err := row.Scan(&perm); err != nil {
 		if err != sql.ErrNoRows {
-			err := fmt.Errorf("Failed to check shared repo permission: %v", err)
+			err := fmt.Errorf("failed to check shared repo permission: %v", err)
 			return "", err
 		}
 	}
@@ -251,7 +251,7 @@ func checkInnerPubRepoPerm(repoID string) (string, error) {
 	var perm string
 	if err := row.Scan(&perm); err != nil {
 		if err != sql.ErrNoRows {
-			err := fmt.Errorf("Failed to check inner public repo permission: %v", err)
+			err := fmt.Errorf("failed to check inner public repo permission: %v", err)
 			return "", err
 		}
 	}
@@ -302,7 +302,7 @@ func getSharedDirsToUser(originRepoID string, toEmail string) (map[string]string
 	defer cancel()
 	rows, err := seafileDB.QueryContext(ctx, sqlStr, toEmail, originRepoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get shared directories by user %s: %v", toEmail, err)
+		err := fmt.Errorf("failed to get shared directories by user %s: %v", toEmail, err)
 		return nil, err
 	}
 
@@ -316,7 +316,7 @@ func getSharedDirsToUser(originRepoID string, toEmail string) (map[string]string
 		}
 	}
 	if err := rows.Err(); err != nil {
-		err := fmt.Errorf("Failed to get shared directories by user %s: %v", toEmail, err)
+		err := fmt.Errorf("failed to get shared directories by user %s: %v", toEmail, err)
 		return nil, err
 	}
 
@@ -362,7 +362,7 @@ func getSharedDirsToGroup(originRepoID string, groups []group) (map[string]strin
 	defer cancel()
 	rows, err := seafileDB.QueryContext(ctx, sqlStr, originRepoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get shared directories: %v", err)
+		err := fmt.Errorf("failed to get shared directories: %v", err)
 		return nil, err
 	}
 
@@ -377,7 +377,7 @@ func getSharedDirsToGroup(originRepoID string, groups []group) (map[string]strin
 	}
 
 	if err := rows.Err(); err != nil {
-		err := fmt.Errorf("Failed to get shared directories: %v", err)
+		err := fmt.Errorf("failed to get shared directories: %v", err)
 		return nil, err
 	}
 
@@ -551,7 +551,8 @@ func ListInnerPubRepos() ([]*SharedRepo, error) {
 func ListShareRepos(email, columnType string) ([]*SharedRepo, error) {
 	var repos []*SharedRepo
 	var query string
-	if columnType == "from_email" {
+	switch columnType {
+	case "from_email":
 		query = "SELECT sh.repo_id, to_email, " +
 			"permission, commit_id, " +
 			"i.name, i.update_time, i.version, i.type FROM " +
@@ -560,7 +561,7 @@ func ListShareRepos(email, columnType string) ([]*SharedRepo, error) {
 			"sh.repo_id = b.repo_id AND " +
 			"b.name = 'master' " +
 			"ORDER BY i.update_time DESC, sh.repo_id"
-	} else if columnType == "to_email" {
+	case "to_email":
 		query = "SELECT sh.repo_id, from_email, " +
 			"permission, commit_id, " +
 			"i.name, i.update_time, i.version, i.type FROM " +
@@ -569,8 +570,8 @@ func ListShareRepos(email, columnType string) ([]*SharedRepo, error) {
 			"sh.repo_id = b.repo_id AND " +
 			"b.name = 'master' " +
 			"ORDER BY i.update_time DESC, sh.repo_id"
-	} else {
-		err := fmt.Errorf("Wrong column type: %s", columnType)
+	default:
+		err := fmt.Errorf("wrong column type: %s", columnType)
 		return nil, err
 	}
 

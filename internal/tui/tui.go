@@ -17,12 +17,12 @@ import (
 
 // Views
 const (
-	viewLogin    = "login"
-	viewRepos    = "repos"
-	viewNewRepo  = "new_repo"
-	viewConfirm  = "confirm_delete"
-	viewBrowse        = "browse"
-	viewUpload        = "upload"
+	viewLogin            = "login"
+	viewRepos            = "repos"
+	viewNewRepo          = "new_repo"
+	viewConfirm          = "confirm_delete"
+	viewBrowse           = "browse"
+	viewUpload           = "upload"
 	viewMkdir            = "mkdir"
 	viewConfirmDelete    = "confirm_delete_file"
 	viewConfirmOverwrite = "confirm_overwrite"
@@ -84,8 +84,8 @@ type model struct {
 	browseRepoID   string
 	browseRepoName string
 	browsePath     string
-	dirEntries   []client.DirEntry
-	browseCursor int
+	dirEntries     []client.DirEntry
+	browseCursor   int
 
 	// Upload
 	uploadInput textinput.Model
@@ -373,7 +373,7 @@ func (m model) renderRepos() string {
 		if repo.Encrypted {
 			encrypted = dimStyle.Render(" [encrypted]")
 		}
-		b.WriteString(fmt.Sprintf("%s%s%s%s\n", cursor, name, ts, encrypted))
+		fmt.Fprintf(&b, "%s%s%s%s\n", cursor, name, ts, encrypted)
 		b.WriteString(dimStyle.Render(fmt.Sprintf("    %s", repo.ID)) + "\n")
 	}
 
@@ -473,7 +473,7 @@ func (m model) renderConfirm() string {
 		name = m.repos[m.cursor].Name
 	}
 	b.WriteString(titleStyle.Render("Delete Library") + "\n\n")
-	b.WriteString(fmt.Sprintf("Are you sure you want to delete %q?\n\n", name))
+	fmt.Fprintf(&b, "Are you sure you want to delete %q?\n\n", name)
 	b.WriteString(helpStyle.Render("y: yes  n: no"))
 	return b.String()
 }
@@ -635,7 +635,7 @@ func (m model) renderBrowse() string {
 			if entry.Mtime > 0 {
 				ts = dimStyle.Render("  " + time.Unix(entry.Mtime, 0).Format("2006-01-02 15:04"))
 			}
-			b.WriteString(fmt.Sprintf("%s%s%s\n", cursor, name, ts))
+			fmt.Fprintf(&b, "%s%s%s\n", cursor, name, ts)
 		} else {
 			name := entry.Name
 			if i == m.browseCursor {
@@ -646,7 +646,7 @@ func (m model) renderBrowse() string {
 			if entry.Mtime > 0 {
 				ts = dimStyle.Render("  " + time.Unix(entry.Mtime, 0).Format("2006-01-02 15:04"))
 			}
-			b.WriteString(fmt.Sprintf("%s%s  %s%s\n", cursor, name, size, ts))
+			fmt.Fprintf(&b, "%s%s  %s%s\n", cursor, name, size, ts)
 		}
 	}
 
@@ -803,7 +803,7 @@ func (m model) renderConfirmDeleteFile() string {
 		name = m.dirEntries[m.browseCursor].Name
 	}
 	b.WriteString(titleStyle.Render("Delete") + "\n\n")
-	b.WriteString(fmt.Sprintf("Are you sure you want to delete %q?\n\n", name))
+	fmt.Fprintf(&b, "Are you sure you want to delete %q?\n\n", name)
 	b.WriteString(helpStyle.Render("y: yes  n: no"))
 	return b.String()
 }
@@ -967,7 +967,7 @@ func (m model) renderMove() string {
 		if i == m.movePickerCursor {
 			name = selectedStyle.Render(name)
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+		fmt.Fprintf(&b, "%s%s\n", cursor, name)
 	}
 
 	b.WriteString("\n")
@@ -1006,7 +1006,7 @@ func (m model) updateConfirmOverwrite(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) renderConfirmOverwrite() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("File exists") + "\n\n")
-	b.WriteString(fmt.Sprintf("Overwrite local file %q?\n\n", m.pendingDownloadLocalPath))
+	fmt.Fprintf(&b, "Overwrite local file %q?\n\n", m.pendingDownloadLocalPath)
 	b.WriteString(helpStyle.Render("y: yes  n: no"))
 	return b.String()
 }

@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/crypto/pbkdf2"
 
-	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/dkam/silo/fileserver/dbutil"
 	"github.com/dkam/silo/fileserver/option"
+	jwt "github.com/golang-jwt/jwt/v5"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -75,10 +75,10 @@ func validatePasswd(password, storedPasswd string) bool {
 	}
 
 	hashLen := len(storedPasswd)
-	switch {
-	case hashLen == sha256.Size*2:
+	switch hashLen {
+	case sha256.Size * 2:
 		return validateSHA256Salted(password, storedPasswd)
-	case hashLen == sha1.Size*2:
+	case sha1.Size * 2:
 		return validateSHA1(password, storedPasswd)
 	default:
 		return false

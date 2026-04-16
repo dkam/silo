@@ -29,7 +29,6 @@ import (
 	"sort"
 	"syscall"
 
-	"github.com/gorilla/mux"
 	"github.com/dkam/silo/fileserver/blockmgr"
 	"github.com/dkam/silo/fileserver/commitmgr"
 	"github.com/dkam/silo/fileserver/diff"
@@ -41,6 +40,7 @@ import (
 	"github.com/dkam/silo/fileserver/tokenstore"
 	"github.com/dkam/silo/fileserver/utils"
 	"github.com/dkam/silo/fileserver/workerpool"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/text/unicode/norm"
 )
@@ -1417,7 +1417,7 @@ func createRelativePath(repoID, parentDir, relativePath, user string) *appError 
 	err := mkdirWithParents(repoID, parentDir, relativePath, user)
 	if err != nil {
 		msg := "Internal error.\n"
-		err := fmt.Errorf("Failed to create parent directory: %v", err)
+		err := fmt.Errorf("failed to create parent directory: %v", err)
 		return &appError{err, msg, http.StatusInternalServerError}
 	}
 
@@ -1731,7 +1731,7 @@ func postMultiFiles(rsp http.ResponseWriter, r *http.Request, repoID, parentDir,
 	repo := repomgr.Get(repoID)
 	if repo == nil {
 		msg := "Failed to get repo.\n"
-		err := fmt.Errorf("Failed to get repo %s", repoID)
+		err := fmt.Errorf("failed to get repo %s", repoID)
 		return &appError{err, msg, http.StatusInternalServerError}
 	}
 
@@ -1859,10 +1859,7 @@ func checkFilesWithSameName(repo *repomgr.Repo, canonPath string, fileNames []st
 }
 
 func postFilesAndGenCommit(fileNames []string, repoID string, user, canonPath string, replace bool, ids []string, sizes []int64, lastModify int64, lastGCID string) (string, error) {
-	handleConncurrentUpdate := true
-	if !replace {
-		handleConncurrentUpdate = false
-	}
+	handleConncurrentUpdate := replace
 	repo := repomgr.Get(repoID)
 	if repo == nil {
 		err := fmt.Errorf("failed to get repo %s", repoID)
@@ -1962,12 +1959,12 @@ func formatJSONRet(nameList, idList []string, sizeList []int64) ([]byte, error) 
 }
 
 func getCanonPath(p string) string {
-	formatPath := strings.Replace(p, "\\", "/", -1)
+	formatPath := strings.ReplaceAll(p, "\\", "/")
 	return filepath.Join(formatPath)
 }
 
 var (
-	ErrConflict   = errors.New("Concurent upload conflict")
+	ErrConflict   = errors.New("concurrent upload conflict")
 	ErrGCConflict = errors.New("GC Conflict")
 )
 
@@ -2155,7 +2152,7 @@ func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID
 		}
 
 		if lastGCID != gcID.String {
-			err = fmt.Errorf("Head branch update for repo %s conflicts with GC.", repoID)
+			err = fmt.Errorf("head branch update for repo %s conflicts with GC", repoID)
 			trans.Rollback()
 			return true, ErrGCConflict
 		}
@@ -2692,9 +2689,6 @@ func chunkingWorker(ctx context.Context, wg *sync.WaitGroup, chunkJobs chan chun
 
 		job := job
 		blkID, err := chunkFile(job)
-		if err != nil {
-		} else {
-		}
 		idx := job.offset / int64(option.FixedBlockSize)
 		result := chunkingResult{idx, blkID, err}
 		res <- result
@@ -2815,14 +2809,14 @@ func checkParentDir(repoID string, parentDir string) *appError {
 	repo := repomgr.Get(repoID)
 	if repo == nil {
 		msg := "Failed to get repo.\n"
-		err := fmt.Errorf("Failed to get repo %s", repoID)
+		err := fmt.Errorf("failed to get repo %s", repoID)
 		return &appError{err, msg, http.StatusInternalServerError}
 	}
 
 	commit, err := commitmgr.Load(repoID, repo.HeadCommitID)
 	if err != nil {
 		msg := "Failed to get head commit.\n"
-		err := fmt.Errorf("Failed to get head commit for repo %s", repoID)
+		err := fmt.Errorf("failed to get head commit for repo %s", repoID)
 		return &appError{err, msg, http.StatusInternalServerError}
 	}
 
@@ -3264,7 +3258,7 @@ func putFile(rsp http.ResponseWriter, r *http.Request, repoID, parentDir, user, 
 	repo := repomgr.Get(repoID)
 	if repo == nil {
 		msg := "Failed to get repo.\n"
-		err := fmt.Errorf("Failed to get repo %s", repoID)
+		err := fmt.Errorf("failed to get repo %s", repoID)
 		return &appError{err, msg, http.StatusInternalServerError}
 	}
 
@@ -3557,7 +3551,7 @@ func commitFileBlocks(repoID, parentDir, fileName, blockIDsJSON, user string, fi
 	repo := repomgr.Get(repoID)
 	if repo == nil {
 		msg := "Failed to get repo.\n"
-		err := fmt.Errorf("Failed to get repo %s", repoID)
+		err := fmt.Errorf("failed to get repo %s", repoID)
 		return "", &appError{err, msg, http.StatusInternalServerError}
 	}
 
@@ -3751,7 +3745,7 @@ func postBlocks(repoID, user string, fsm *recvData) *appError {
 	repo := repomgr.Get(repoID)
 	if repo == nil {
 		msg := "Failed to get repo.\n"
-		err := fmt.Errorf("Failed to get repo %s", repoID)
+		err := fmt.Errorf("failed to get repo %s", repoID)
 		return &appError{err, msg, http.StatusInternalServerError}
 	}
 
@@ -4171,7 +4165,7 @@ func jsonToDirentList(repo *repomgr.Repo, parentDir, dirents string) ([]*fsmgr.S
 	for _, path := range list {
 		normPath := normalizeUTF8Path(path)
 		if normPath == "" || normPath == "/" {
-			return nil, fmt.Errorf("Invalid download file name: %s\n", normPath)
+			return nil, fmt.Errorf("invalid download file name: %s", normPath)
 		}
 		dent, ok := direntHash[normPath]
 		if !ok {

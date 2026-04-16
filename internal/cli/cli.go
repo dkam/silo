@@ -29,7 +29,7 @@ func Run(serverURL, email, password string, args []string) error {
 		return fmt.Errorf("no subcommand given")
 	}
 	if email == "" || password == "" {
-		return fmt.Errorf("SILO_EMAIL and SILO_PASSWORD (or SEAFILE_EMAIL/SEAFILE_PASSWORD) must be set")
+		return fmt.Errorf("SILO_EMAIL and SILO_PASSWORD must be set")
 	}
 
 	c := client.NewClient(serverURL)
@@ -81,7 +81,7 @@ func cmdRepos(c *client.APIClient, args []string) error {
 
 func cmdRepo(c *client.APIClient, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: silo repo <create|rm> ...")
+		return fmt.Errorf("usage: silo repo <create|rm>")
 	}
 	switch args[0] {
 	case "create":

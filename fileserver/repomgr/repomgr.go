@@ -62,8 +62,8 @@ type VRepoInfo struct {
 	BaseCommitID string
 }
 
-var seafileDB *sql.DB  // read handle
-var seafileWriteDB *sql.DB  // write handle
+var seafileDB *sql.DB      // read handle
+var seafileWriteDB *sql.DB // write handle
 
 // Init initialize status of repomgr package
 func Init(readDB, writeDB *sql.DB) {
@@ -279,16 +279,13 @@ func GetEx(id string) *Repo {
 	if commit.Encrypted == "true" {
 		repo.IsEncrypted = true
 		repo.EncVersion = commit.EncVersion
-		if repo.EncVersion == 1 {
+		switch repo.EncVersion {
+		case 1:
 			repo.Magic = commit.Magic
-		} else if repo.EncVersion == 2 {
-			repo.Magic = commit.Magic
-			repo.RandomKey = commit.RandomKey
-		} else if repo.EncVersion == 3 {
+		case 2:
 			repo.Magic = commit.Magic
 			repo.RandomKey = commit.RandomKey
-			repo.Salt = commit.Salt
-		} else if repo.EncVersion == 4 {
+		case 3, 4:
 			repo.Magic = commit.Magic
 			repo.RandomKey = commit.RandomKey
 			repo.Salt = commit.Salt
@@ -363,7 +360,7 @@ func GetEmailByToken(repoID string, token string) (string, error) {
 
 // GetRepoStatus return repo status by repo id.
 func GetRepoStatus(repoID string) (int, error) {
-	var status int = -1
+	var status = -1
 
 	// First, check origin repo's status.
 	sqlStr := "SELECT i.status FROM VirtualRepo v LEFT JOIN RepoInfo i " +
@@ -960,9 +957,8 @@ func DeleteRepo(repoID string) error {
 	}
 
 	// Mark for garbage collection
-	if _, err := tx.ExecContext(ctx, dbutil.InsertOrIgnore("GarbageRepos", "repo_id"), repoID); err != nil {
-		// Non-fatal — GC will still find orphaned objects
-	}
+	// Non-fatal — GC will still find orphaned objects
+	_, _ = tx.ExecContext(ctx, dbutil.InsertOrIgnore("GarbageRepos", "repo_id"), repoID)
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %v", err)

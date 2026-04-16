@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/dkam/silo/fileserver/blockmgr"
 	"github.com/dkam/silo/fileserver/commitmgr"
 	"github.com/dkam/silo/fileserver/diff"
@@ -27,6 +26,7 @@ import (
 	"github.com/dkam/silo/fileserver/share"
 	"github.com/dkam/silo/fileserver/utils"
 	"github.com/dkam/silo/fileserver/workerpool"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -149,7 +149,7 @@ func getFsId(args ...interface{}) error {
 	}
 	repo := repomgr.Get(repoID)
 	if repo == nil {
-		err := fmt.Errorf("Failed to find repo %.8s", repoID)
+		err := fmt.Errorf("failed to find repo %.8s", repoID)
 		appErr := &appError{err, "", http.StatusInternalServerError}
 		resChan <- &calResult{user, appErr}
 		return nil
@@ -157,7 +157,7 @@ func getFsId(args ...interface{}) error {
 	ret, err := calculateSendObjectList(r.Context(), repo, serverHead, clientHead, dirOnly)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			err := fmt.Errorf("Failed to get fs id list: %w", err)
+			err := fmt.Errorf("failed to get fs id list: %w", err)
 			appErr := &appError{err, "", http.StatusInternalServerError}
 			resChan <- &calResult{user, appErr}
 			return nil
@@ -253,17 +253,17 @@ func permissionCheckCB(rsp http.ResponseWriter, r *http.Request) *appError {
 		token := r.Header.Get("Seafile-Repo-Token")
 		exists, err := repomgr.TokenPeerInfoExists(token)
 		if err != nil {
-			err := fmt.Errorf("Failed to check whether token %s peer info exist: %v", token, err)
+			err := fmt.Errorf("failed to check whether token %s peer info exist: %v", token, err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 		if !exists {
 			if err := repomgr.AddTokenPeerInfo(token, clientID, ip, clientName, clientVer, int64(time.Now().Unix())); err != nil {
-				err := fmt.Errorf("Failed to add token peer info: %v", err)
+				err := fmt.Errorf("failed to add token peer info: %v", err)
 				return &appError{err, "", http.StatusInternalServerError}
 			}
 		} else {
 			if err := repomgr.UpdateTokenPeerInfo(token, clientID, clientVer, int64(time.Now().Unix())); err != nil {
-				err := fmt.Errorf("Failed to update token peer info: %v", err)
+				err := fmt.Errorf("failed to update token peer info: %v", err)
 				return &appError{err, "", http.StatusInternalServerError}
 			}
 		}
@@ -286,7 +286,7 @@ func getBlockMapCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	storeID, err := getRepoStoreID(repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repo store id by repo id %s: %v", repoID, err)
+		err := fmt.Errorf("failed to get repo store id by repo id %s: %v", repoID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -300,7 +300,7 @@ func getBlockMapCB(rsp http.ResponseWriter, r *http.Request) *appError {
 	for _, blockID := range seafile.BlkIDs {
 		blockSize, err := blockmgr.Stat(storeID, blockID)
 		if err != nil {
-			err := fmt.Errorf("Failed to find block %s/%s", storeID, blockID)
+			err := fmt.Errorf("failed to find block %s/%s", storeID, blockID)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 		blockSizes = append(blockSizes, blockSize)
@@ -310,7 +310,7 @@ func getBlockMapCB(rsp http.ResponseWriter, r *http.Request) *appError {
 	if blockSizes != nil {
 		data, err = json.Marshal(blockSizes)
 		if err != nil {
-			err := fmt.Errorf("Failed to marshal json: %v", err)
+			err := fmt.Errorf("failed to marshal json: %v", err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 	} else {
@@ -342,7 +342,7 @@ func getAccessibleRepoListCB(rsp http.ResponseWriter, r *http.Request) *appError
 
 	repos, err := share.GetReposByOwner(user)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repos by owner %s: %v", user, err)
+		err := fmt.Errorf("failed to get repos by owner %s: %v", user, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -362,7 +362,7 @@ func getAccessibleRepoListCB(rsp http.ResponseWriter, r *http.Request) *appError
 
 	repos, err = share.ListShareRepos(user, "to_email")
 	if err != nil {
-		err := fmt.Errorf("Failed to get share repos by user %s: %v", user, err)
+		err := fmt.Errorf("failed to get share repos by user %s: %v", user, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 	for _, sRepo := range repos {
@@ -379,7 +379,7 @@ func getAccessibleRepoListCB(rsp http.ResponseWriter, r *http.Request) *appError
 
 	repos, err = share.GetGroupReposByUser(user, -1)
 	if err != nil {
-		err := fmt.Errorf("Failed to get group repos by user %s: %v", user, err)
+		err := fmt.Errorf("failed to get group repos by user %s: %v", user, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 	reposTable := filterGroupRepos(repos)
@@ -396,7 +396,7 @@ func getAccessibleRepoListCB(rsp http.ResponseWriter, r *http.Request) *appError
 
 	repos, err = share.ListInnerPubRepos()
 	if err != nil {
-		err := fmt.Errorf("Failed to get inner public repos: %v", err)
+		err := fmt.Errorf("failed to get inner public repos: %v", err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -417,7 +417,7 @@ func getAccessibleRepoListCB(rsp http.ResponseWriter, r *http.Request) *appError
 	if repoObjects != nil {
 		data, err = json.Marshal(repoObjects)
 		if err != nil {
-			err := fmt.Errorf("Failed to marshal json: %v", err)
+			err := fmt.Errorf("failed to marshal json: %v", err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 	} else {
@@ -464,7 +464,7 @@ func recvFSCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	storeID, err := getRepoStoreID(repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repo store id by repo id %s: %v", repoID, err)
+		err := fmt.Errorf("failed to get repo store id by repo id %s: %v", repoID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 	fsBuf, err := io.ReadAll(r.Body)
@@ -493,7 +493,7 @@ func recvFSCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 		objBuffer := bytes.NewBuffer(fsBuf[44 : 44+objSize])
 		if err := fsmgr.WriteRaw(storeID, objID, objBuffer); err != nil {
-			err := fmt.Errorf("Failed to write fs obj %s:%s : %v", storeID, objID, err)
+			err := fmt.Errorf("failed to write fs obj %s:%s : %v", storeID, objID, err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 		fsBuf = fsBuf[44+objSize:]
@@ -529,7 +529,7 @@ func postCheckExistCB(rsp http.ResponseWriter, r *http.Request, existType checkE
 
 	storeID, err := getRepoStoreID(repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repo store id by repo id %s: %v", repoID, err)
+		err := fmt.Errorf("failed to get repo store id by repo id %s: %v", repoID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -544,9 +544,10 @@ func postCheckExistCB(rsp http.ResponseWriter, r *http.Request, existType checkE
 		if !utils.IsObjectIDValid(objIDList[i]) {
 			continue
 		}
-		if existType == checkFSExist {
+		switch existType {
+		case checkFSExist:
 			ret, _ = fsmgr.Exists(storeID, objIDList[i])
-		} else if existType == checkBlockExist {
+		case checkBlockExist:
 			ret = blockmgr.Exists(storeID, objIDList[i])
 		}
 		if !ret {
@@ -558,7 +559,7 @@ func postCheckExistCB(rsp http.ResponseWriter, r *http.Request, existType checkE
 	if neededObjs != nil {
 		data, err = json.Marshal(neededObjs)
 		if err != nil {
-			err := fmt.Errorf("Failed to marshal json: %v", err)
+			err := fmt.Errorf("failed to marshal json: %v", err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 	} else {
@@ -586,7 +587,7 @@ func packFSCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	storeID, err := getRepoStoreID(repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repo store id by repo id %s: %v", repoID, err)
+		err := fmt.Errorf("failed to get repo store id by repo id %s: %v", repoID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -605,7 +606,7 @@ func packFSCB(rsp http.ResponseWriter, r *http.Request) *appError {
 		data.WriteString(fsIDList[i])
 		var tmp bytes.Buffer
 		if err := fsmgr.ReadRaw(storeID, fsIDList[i], &tmp); err != nil {
-			err := fmt.Errorf("Failed to read fs %s:%s: %v", storeID, fsIDList[i], err)
+			err := fmt.Errorf("failed to read fs %s:%s: %v", storeID, fsIDList[i], err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 		tmpLen := make([]byte, 4)
@@ -640,9 +641,9 @@ func headCommitsMultiCB(rsp http.ResponseWriter, r *http.Request) *appError {
 			return &appError{nil, "", http.StatusBadRequest}
 		}
 		if i == 0 {
-			repoIDs.WriteString(fmt.Sprintf("'%s'", repoIDList[i]))
+			fmt.Fprintf(&repoIDs, "'%s'", repoIDList[i])
 		} else {
-			repoIDs.WriteString(fmt.Sprintf(",'%s'", repoIDList[i]))
+			fmt.Fprintf(&repoIDs, ",'%s'", repoIDList[i])
 		}
 	}
 
@@ -655,7 +656,7 @@ func headCommitsMultiCB(rsp http.ResponseWriter, r *http.Request) *appError {
 	defer cancel()
 	rows, err := seafilePair.Read.QueryContext(ctx, sqlStr)
 	if err != nil {
-		err := fmt.Errorf("Failed to get commit id: %v", err)
+		err := fmt.Errorf("failed to get commit id: %v", err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -671,13 +672,13 @@ func headCommitsMultiCB(rsp http.ResponseWriter, r *http.Request) *appError {
 	}
 
 	if err := rows.Err(); err != nil {
-		err := fmt.Errorf("Failed to get commit id: %v", err)
+		err := fmt.Errorf("failed to get commit id: %v", err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
 	data, err := json.Marshal(commitIDMap)
 	if err != nil {
-		err := fmt.Errorf("Failed to marshal json: %v", err)
+		err := fmt.Errorf("failed to marshal json: %v", err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -758,27 +759,30 @@ func getFsObjIDCB(rsp http.ResponseWriter, r *http.Request) *appError {
 }
 
 func headCommitOperCB(rsp http.ResponseWriter, r *http.Request) *appError {
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		return getHeadCommit(rsp, r)
-	} else if r.Method == http.MethodPut {
+	case http.MethodPut:
 		return putUpdateBranchCB(rsp, r)
 	}
 	return &appError{nil, "", http.StatusBadRequest}
 }
 
 func commitOperCB(rsp http.ResponseWriter, r *http.Request) *appError {
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		return getCommitInfo(rsp, r)
-	} else if r.Method == http.MethodPut {
+	case http.MethodPut:
 		return putCommitCB(rsp, r)
 	}
 	return &appError{nil, "", http.StatusBadRequest}
 }
 
 func blockOperCB(rsp http.ResponseWriter, r *http.Request) *appError {
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		return getBlockInfo(rsp, r)
-	} else if r.Method == http.MethodPut {
+	case http.MethodPut:
 		return putSendBlockCB(rsp, r)
 	}
 	return &appError{nil, "", http.StatusBadRequest}
@@ -801,12 +805,12 @@ func putSendBlockCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	storeID, err := getRepoStoreID(repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repo store id by repo id %s: %v", repoID, err)
+		err := fmt.Errorf("failed to get repo store id by repo id %s: %v", repoID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
 	if err := blockmgr.Write(storeID, blockID, r.Body); err != nil {
-		err := fmt.Errorf("Failed to write block %.8s:%s: %v", storeID, blockID, err)
+		err := fmt.Errorf("failed to write block %.8s:%s: %v", storeID, blockID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -832,7 +836,7 @@ func getBlockInfo(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	storeID, err := getRepoStoreID(repoID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get repo store id by repo id %s: %v", repoID, err)
+		err := fmt.Errorf("failed to get repo store id by repo id %s: %v", repoID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -953,7 +957,7 @@ func putCommitCB(rsp http.ResponseWriter, r *http.Request) *appError {
 	}
 
 	if err := commitmgr.Save(commit); err != nil {
-		err := fmt.Errorf("Failed to add commit %s: %v", commitID, err)
+		err := fmt.Errorf("failed to add commit %s: %v", commitID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	} else {
 		token := r.Header.Get("Seafile-Repo-Token")
@@ -961,7 +965,7 @@ func putCommitCB(rsp http.ResponseWriter, r *http.Request) *appError {
 			token = utils.GetAuthorizationToken(r.Header)
 		}
 		if err := saveLastGCID(repoID, token); err != nil {
-			err := fmt.Errorf("Failed to save gc id: %v", err)
+			err := fmt.Errorf("failed to save gc id: %v", err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 	}
@@ -988,7 +992,7 @@ func getCommitInfo(rsp http.ResponseWriter, r *http.Request) *appError {
 	var data bytes.Buffer
 	err := commitmgr.ReadRaw(repoID, commitID, &data)
 	if err != nil {
-		err := fmt.Errorf("Failed to read commit %s:%s: %v", repoID, commitID, err)
+		err := fmt.Errorf("failed to read commit %s:%s: %v", repoID, commitID, err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -1022,19 +1026,19 @@ func putUpdateBranchCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	repo := repomgr.Get(repoID)
 	if repo == nil {
-		err := fmt.Errorf("Repo %s is missing or corrupted", repoID)
+		err := fmt.Errorf("repo %s is missing or corrupted", repoID)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
 	newCommit, err := commitmgr.Load(repoID, newCommitID)
 	if err != nil {
-		err := fmt.Errorf("Failed to get commit %s for repo %s", newCommitID, repoID)
+		err := fmt.Errorf("failed to get commit %s for repo %s", newCommitID, repoID)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
 	base, err := commitmgr.Load(repoID, newCommit.ParentID.String)
 	if err != nil {
-		err := fmt.Errorf("Failed to get commit %s for repo %s", newCommit.ParentID.String, repoID)
+		err := fmt.Errorf("failed to get commit %s for repo %s", newCommit.ParentID.String, repoID)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
@@ -1045,7 +1049,7 @@ func putUpdateBranchCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	ret, err := checkQuota(repoID, 0)
 	if err != nil {
-		err := fmt.Errorf("Failed to check quota: %v", err)
+		err := fmt.Errorf("failed to check quota: %v", err)
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 	if ret == 1 {
@@ -1067,7 +1071,7 @@ func putUpdateBranchCB(rsp http.ResponseWriter, r *http.Request) *appError {
 		if errors.Is(err, ErrGCConflict) {
 			return &appError{nil, "GC Conflict.\n", http.StatusConflict}
 		} else {
-			err := fmt.Errorf("Fast forward merge for repo %s is failed: %v", repoID, err)
+			err := fmt.Errorf("fast forward merge for repo %s is failed: %v", repoID, err)
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 	}
@@ -1452,7 +1456,7 @@ var ErrTimeout = fmt.Errorf("get fs id list timeout")
 func calculateSendObjectList(ctx context.Context, repo *repomgr.Repo, serverHead string, clientHead string, dirOnly bool) ([]interface{}, error) {
 	masterHead, err := commitmgr.Load(repo.ID, serverHead)
 	if err != nil {
-		err := fmt.Errorf("Failed to load server head commit %s:%s: %v", repo.ID, serverHead, err)
+		err := fmt.Errorf("failed to load server head commit %s:%s: %v", repo.ID, serverHead, err)
 		return nil, err
 	}
 	var remoteHead *commitmgr.Commit
@@ -1460,7 +1464,7 @@ func calculateSendObjectList(ctx context.Context, repo *repomgr.Repo, serverHead
 	if clientHead != "" {
 		remoteHead, err = commitmgr.Load(repo.ID, clientHead)
 		if err != nil {
-			err := fmt.Errorf("Failed to load remote head commit %s:%s: %v", repo.ID, clientHead, err)
+			err := fmt.Errorf("failed to load remote head commit %s:%s: %v", repo.ID, clientHead, err)
 			return nil, err
 		}
 		remoteHeadRoot = remoteHead.RootID

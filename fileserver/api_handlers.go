@@ -9,13 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/dkam/silo/fileserver/commitmgr"
 	"github.com/dkam/silo/fileserver/fsmgr"
 	"github.com/dkam/silo/fileserver/middleware"
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/share"
 	"github.com/dkam/silo/fileserver/tokenstore"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
 

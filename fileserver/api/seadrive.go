@@ -3,13 +3,13 @@ package api
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"github.com/dkam/silo/fileserver/apitokenstore"
 	"github.com/dkam/silo/fileserver/authmgr"
 	"github.com/dkam/silo/fileserver/middleware"
 	"github.com/dkam/silo/fileserver/option"
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/share"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
 

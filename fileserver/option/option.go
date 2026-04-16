@@ -203,7 +203,6 @@ func LoadFileServerOptions(configFile string) {
 		NodeName = "default"
 	}
 
-	// Log level env override (takes precedence over config file)
 	if lvl := os.Getenv("SILO_LOG_LEVEL"); lvl != "" {
 		LogLevel = lvl
 	}
@@ -417,13 +416,13 @@ func LoadDBOption(configFile string) (*DBOption, error) {
 	dbOpt = loadDBOptionFromEnv(dbOpt)
 
 	if dbOpt.Host == "" {
-		return nil, fmt.Errorf("no database host in seafile.conf.")
+		return nil, fmt.Errorf("no database host in seafile.conf")
 	}
 	if dbOpt.User == "" {
-		return nil, fmt.Errorf("no database user in seafile.conf.")
+		return nil, fmt.Errorf("no database user in seafile.conf")
 	}
 	if dbOpt.Password == "" {
-		return nil, fmt.Errorf("no database password in seafile.conf.")
+		return nil, fmt.Errorf("no database password in seafile.conf")
 	}
 
 	DBType = dbOpt.DBEngine
@@ -461,7 +460,7 @@ func loadDBOptionFromFile(configFile string) (*DBOption, error) {
 		dbEngine = key.String()
 	}
 	if dbEngine != "mysql" && dbEngine != "sqlite" {
-		return nil, fmt.Errorf("unsupported database %s.", dbEngine)
+		return nil, fmt.Errorf("unsupported database %s", dbEngine)
 	}
 	dbOpt.DBEngine = dbEngine
 	if key, err = section.GetKey("host"); err == nil {

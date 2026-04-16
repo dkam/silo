@@ -312,11 +312,12 @@ func mergeDirectories(storeID string, dents []*fsmgr.SeafDirent, baseDir string,
 		return nil, err
 	}
 
-	if dirMask == 3 || dirMask == 6 || dirMask == 7 {
+	switch dirMask {
+	case 3, 6, 7:
 		dent := dents[1]
 		dent.ID = opt.mergedRoot
 		mergedDents = append(mergedDents, dent)
-	} else if dirMask == 5 {
+	case 5:
 		dent := dents[2]
 		dent.ID = opt.mergedRoot
 		mergedDents = append(mergedDents, dent)

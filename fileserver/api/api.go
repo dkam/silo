@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/gorilla/mux"
 	"github.com/dkam/silo/fileserver/authmgr"
 	"github.com/dkam/silo/fileserver/fsmgr"
 	"github.com/dkam/silo/fileserver/middleware"
@@ -15,15 +14,14 @@ import (
 	"github.com/dkam/silo/fileserver/repomgr"
 	"github.com/dkam/silo/fileserver/share"
 	"github.com/dkam/silo/fileserver/tokenstore"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
 
-var seafileDB *sql.DB      // read handle
-var seafileWriteDB *sql.DB // write handle
+var seafileDB *sql.DB // read handle
 
-func Init(readDB, writeDB *sql.DB) {
+func Init(readDB, _ *sql.DB) {
 	seafileDB = readDB
-	seafileWriteDB = writeDB
 }
 
 // writeJSON writes a JSON response with the given status code.
@@ -319,4 +317,3 @@ func ListDirHandler(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, entries)
 }
-
