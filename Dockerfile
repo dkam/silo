@@ -3,7 +3,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /silo ./cmd/silo
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -ldflags "-X main.Version=${VERSION}" -o /silo ./cmd/silo
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /silo /usr/local/bin/silo
