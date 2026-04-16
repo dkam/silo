@@ -54,49 +54,19 @@ func main() {
 	}
 }
 
-// serverURL/email/password read the SILO_* env vars, falling back to the
-// legacy SEAFILE_* names so existing scripts keep working.
-
 func serverURL() string {
 	if v := os.Getenv("SILO_URL"); v != "" {
 		return v
-	}
-	if v := os.Getenv("SEAFILE_URL"); v != "" {
-		return v
-	}
-	// Fall back to the same host/port the server daemon uses.
-	host := os.Getenv("SEAFILE_FILESERVER_HOST")
-	port := os.Getenv("SEAFILE_FILESERVER_PORT")
-	if host != "" || port != "" {
-		if host == "" {
-			host = "127.0.0.1"
-		}
-		if port == "" {
-			port = "8082"
-		}
-		return fmt.Sprintf("http://%s:%s", host, port)
 	}
 	return defaultServerURL
 }
 
 func email() string {
-	if v := os.Getenv("SILO_EMAIL"); v != "" {
-		return v
-	}
-	if v := os.Getenv("SEAFILE_EMAIL"); v != "" {
-		return v
-	}
-	return os.Getenv("SEAFILE_ADMIN_EMAIL")
+	return os.Getenv("SILO_EMAIL")
 }
 
 func password() string {
-	if v := os.Getenv("SILO_PASSWORD"); v != "" {
-		return v
-	}
-	if v := os.Getenv("SEAFILE_PASSWORD"); v != "" {
-		return v
-	}
-	return os.Getenv("SEAFILE_ADMIN_PASSWORD")
+	return os.Getenv("SILO_PASSWORD")
 }
 
 func printUsage(w *os.File) {
@@ -117,11 +87,19 @@ Usage:
   silo rename <repo-id> <path> <new-name>
   silo version                    Print the build version
 
-Environment:
-  SILO_URL         Server base URL (default http://localhost:8082)
-  SILO_EMAIL       Account email for TUI/CLI
-  SILO_PASSWORD    Account password for TUI/CLI
-  SEAFILE_*        Honored as a fallback for the SILO_* variables
+Server environment:
+  SILO_DATA_DIR          Data directory (default: ~/.local/share/silo)
+  SILO_HOST              Listen address (default: 0.0.0.0)
+  SILO_PORT              Listen port (default: 8082)
+  SILO_ADMIN_EMAIL       Bootstrap admin email (first run)
+  SILO_ADMIN_PASSWORD    Bootstrap admin password (first run)
+  SILO_JWT_SECRET        JWT signing key (auto-generated if unset)
+  SILO_LOG_LEVEL         Log level: debug, info, warn, error
+
+Client environment:
+  SILO_URL               Server base URL (default: http://localhost:8082)
+  SILO_EMAIL             Account email for TUI/CLI
+  SILO_PASSWORD          Account password for TUI/CLI
 
 Run "silo serve -h" for server-side flags.
 `)

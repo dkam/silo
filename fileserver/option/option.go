@@ -49,7 +49,6 @@ var (
 
 	// notification server
 	EnableNotification bool
-	NotificationURL    string
 
 	// GROUP options
 	GroupTableName string
@@ -99,6 +98,16 @@ type DBOption struct {
 	SkipVerify    bool
 	Charset       string
 	DBEngine      string
+}
+
+// EnvWithFallback returns the first non-empty value from the named env vars.
+func EnvWithFallback(names ...string) string {
+	for _, name := range names {
+		if v := os.Getenv(name); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func initDefaultOptions() {
@@ -151,17 +160,12 @@ func LoadFileServerOptions(configFile string) {
 		}
 	}
 
-	// Notification server: silo runs it in-process on the same port as the
-	// fileserver, at /notification. It is enabled by default; set
-	// ENABLE_NOTIFICATION_SERVER=false to disable.
-	//
-	// INNER_NOTIFICATION_SERVER_URL is kept as a legacy no-op env var so
-	// deployments carrying it forward from upstream Seafile don't break.
+	// Notification server: silo runs it in-process at /notification.
+	// Enabled by default; set SILO_ENABLE_NOTIFICATIONS=false to disable.
 	EnableNotification = true
-	if v := os.Getenv("ENABLE_NOTIFICATION_SERVER"); v == "false" || v == "0" {
+	if v := EnvWithFallback("SILO_ENABLE_NOTIFICATIONS", "ENABLE_NOTIFICATION_SERVER"); v == "false" || v == "0" {
 		EnableNotification = false
 	}
-	NotificationURL = os.Getenv("INNER_NOTIFICATION_SERVER_URL")
 
 	if section, err := config.GetSection("httpserver"); err == nil {
 		parseFileServerSection(section)
@@ -170,13 +174,11 @@ func LoadFileServerOptions(configFile string) {
 		parseFileServerSection(section)
 	}
 
-	// Environment overrides for fileserver bind address. These take precedence
-	// over the ini config so deployments can change the listen address without
-	// editing config files.
-	if envHost := os.Getenv("SEAFILE_FILESERVER_HOST"); envHost != "" {
+	// Environment overrides for bind address.
+	if envHost := EnvWithFallback("SILO_HOST", "SEAFILE_FILESERVER_HOST"); envHost != "" {
 		Host = envHost
 	}
-	if envPort := os.Getenv("SEAFILE_FILESERVER_PORT"); envPort != "" {
+	if envPort := EnvWithFallback("SILO_PORT", "SEAFILE_FILESERVER_PORT"); envPort != "" {
 		if port, err := strconv.ParseUint(envPort, 10, 32); err == nil {
 			Port = uint32(port)
 		}
@@ -199,6 +201,11 @@ func LoadFileServerOptions(configFile string) {
 	NodeName = os.Getenv("NODE_NAME")
 	if NodeName == "" {
 		NodeName = "default"
+	}
+
+	// Log level env override (takes precedence over config file)
+	if lvl := os.Getenv("SILO_LOG_LEVEL"); lvl != "" {
+		LogLevel = lvl
 	}
 }
 
@@ -363,8 +370,8 @@ func loadCacheOptionFromEnv() {
 	}
 }
 
-func LoadSeahubConfig() error {
-	JWTPrivateKey = os.Getenv("JWT_PRIVATE_KEY")
+func LoadJWTConfig() error {
+	JWTPrivateKey = EnvWithFallback("SILO_JWT_SECRET", "JWT_PRIVATE_KEY")
 	if JWTPrivateKey == "" {
 		// Auto-generate a key. Tokens won't survive server restarts,
 		// which is fine for a single-server deployment.
@@ -373,9 +380,12 @@ func LoadSeahubConfig() error {
 			return fmt.Errorf("failed to generate JWT key: %v", err)
 		}
 		JWTPrivateKey = hex.EncodeToString(buf)
-		log.Info("JWT_PRIVATE_KEY not set, generated ephemeral key")
+		log.Info("SILO_JWT_SECRET not set, generated ephemeral key")
 	}
 
+	// SeahubURL is used by legacy merge conflict notification and
+	// share-link access checks. Silo has no Seahub, but the code paths
+	// still reference it — they'll fail gracefully (HTTP error, logged).
 	siteRoot := os.Getenv("SITE_ROOT")
 	if siteRoot != "" {
 		SeahubURL = fmt.Sprintf("http://127.0.0.1:8000%sapi/v2.1/internal", siteRoot)

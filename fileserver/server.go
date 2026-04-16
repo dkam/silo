@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
+	"github.com/dkam/silo/internal/xdg"
 	"github.com/dkam/silo/fileserver/api"
 	"github.com/dkam/silo/fileserver/apitokenstore"
 	"github.com/dkam/silo/fileserver/authmgr"
@@ -56,9 +57,6 @@ var logToStdout bool
 var debugLog bool
 
 func init() {
-	if os.Getenv("SEAFILE_LOG_TO_STDOUT") == "true" {
-		logToStdout = true
-	}
 	log.SetFormatter(&LogFormatter{})
 }
 
@@ -214,9 +212,9 @@ func removePidfile(pid_file_path string) error {
 // standalone binary.
 func Run(args []string) error {
 	fs := flag.NewFlagSet("silo serve", flag.ContinueOnError)
-	fs.StringVar(&configFile, "C", "", "path to seafile.conf (optional)")
-	fs.StringVar(&dataDir, "d", "", "seafile data directory")
-	fs.StringVar(&logFile, "l", "", "log file path")
+	fs.StringVar(&configFile, "C", "", "path to config file (optional)")
+	fs.StringVar(&dataDir, "d", "", "data directory (default: $SILO_DATA_DIR or ~/.local/share/silo)")
+	fs.StringVar(&logFile, "l", "", "log file path (default: stdout)")
 	fs.StringVar(&pidFilePath, "P", "", "pid file path")
 	fs.BoolVar(&debugLog, "debug", false, "log every HTTP request (method, path, status, duration)")
 	if err := fs.Parse(args); err != nil {
@@ -232,26 +230,39 @@ func Run(args []string) error {
 		}
 	}
 
+	// Resolve data directory: -d flag > SILO_DATA_DIR env > XDG default
 	if dataDir == "" {
-		log.Fatal("seafile data directory must be specified.")
+		dataDir = os.Getenv("SILO_DATA_DIR")
+	}
+	if dataDir == "" {
+		xdgDefault, err := xdg.DataHome("silo")
+		if err != nil {
+			log.Fatalf("Cannot determine data directory: %v. Use -d or set SILO_DATA_DIR.", err)
+		}
+		dataDir = xdgDefault
+	}
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		log.Fatalf("Failed to create data directory %s: %v", dataDir, err)
 	}
 	var err error
 	absDataDir, err = filepath.Abs(dataDir)
 	if err != nil {
-		log.Fatalf("Failed to convert seafile data dir to absolute path: %v.", err)
+		log.Fatalf("Failed to convert data dir to absolute path: %v.", err)
+	}
+	log.Infof("Data directory: %s", absDataDir)
+
+	// Resolve config file: -C flag > XDG config home > none
+	if configFile == "" {
+		if xdgConf, err := xdg.ConfigHome("silo"); err == nil {
+			candidate := filepath.Join(xdgConf, "seafile.conf")
+			if _, err := os.Stat(candidate); err == nil {
+				configFile = candidate
+			}
+		}
 	}
 
-	if logToStdout {
-		// Use default output (StdOut)
-	} else if logFile == "" {
-		absLogFile = filepath.Join(absDataDir, "fileserver.log")
-		fp, err := os.OpenFile(absLogFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatalf("Failed to open or create log file: %v", err)
-		}
-		logFp = fp
-		log.SetOutput(fp)
-	} else if logFile != "-" {
+	// Logging: default to stdout. Use -l to write to a file instead.
+	if logFile != "" && logFile != "-" {
 		absLogFile, err = filepath.Abs(logFile)
 		if err != nil {
 			log.Fatalf("Failed to convert log file path to absolute path: %v", err)
@@ -262,15 +273,14 @@ func Run(args []string) error {
 		}
 		logFp = fp
 		log.SetOutput(fp)
-	}
-
-	if absLogFile != "" && !logToStdout {
+		logToStdout = false
 		utils.Dup(int(logFp.Fd()), int(os.Stderr.Fd()))
+	} else {
+		logToStdout = true
 	}
-	// When logFile is "-", use default output (StdOut)
 
-	if err := option.LoadSeahubConfig(); err != nil {
-		log.Fatalf("Failed to read seahub config: %v", err)
+	if err := option.LoadJWTConfig(); err != nil {
+		log.Fatalf("Failed to load JWT config: %v", err)
 	}
 
 	option.LoadFileServerOptions(configFile)
@@ -304,8 +314,8 @@ func Run(args []string) error {
 	apitokenstore.Init(seafilePair.Read, seafilePair.Write)
 
 	// Create admin user from env vars if set
-	adminEmail := os.Getenv("SEAFILE_ADMIN_EMAIL")
-	adminPassword := os.Getenv("SEAFILE_ADMIN_PASSWORD")
+	adminEmail := option.EnvWithFallback("SILO_ADMIN_EMAIL", "SEAFILE_ADMIN_EMAIL")
+	adminPassword := option.EnvWithFallback("SILO_ADMIN_PASSWORD", "SEAFILE_ADMIN_PASSWORD")
 	if adminEmail != "" && adminPassword != "" {
 		if err := authmgr.EnsureAdmin(adminEmail, adminPassword); err != nil {
 			log.Fatalf("Failed to create admin user: %v", err)
@@ -342,7 +352,7 @@ func Run(args []string) error {
 	go handleSignals()
 	go handleUser1Signal()
 
-	log.Print("Seafile file server started.")
+	log.Printf("Silo server listening on %s:%d", option.Host, option.Port)
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
