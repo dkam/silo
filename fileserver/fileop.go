@@ -84,7 +84,9 @@ func fileopInit() {
 
 func initUpload() {
 	objDir := filepath.Join(dataDir, "httptemp", "cluster-shared")
-	os.MkdirAll(objDir, os.ModePerm)
+	if err := os.MkdirAll(objDir, os.ModePerm); err != nil {
+		log.Warnf("failed to create upload temp dir: %v", err)
+	}
 }
 
 // contentType = "application/octet-stream"
@@ -406,7 +408,9 @@ func doFile(rsp http.ResponseWriter, r *http.Request, repo *repomgr.Repo, fileID
 	if cryptKey != nil {
 		for _, blkID := range file.BlkIDs {
 			var buf bytes.Buffer
-			blockmgr.Read(repo.StoreID, blkID, &buf)
+			if err := blockmgr.Read(repo.StoreID, blkID, &buf); err != nil {
+				return &appError{fmt.Errorf("failed to read block %s: %v", blkID, err), "", http.StatusInternalServerError}
+			}
 			decoded, err := cryptKey.decrypt(buf.Bytes())
 			if err != nil {
 				err := fmt.Errorf("failed to decrypt block %s: %v", blkID, err)
@@ -547,7 +551,7 @@ func doFileRange(rsp http.ResponseWriter, r *http.Request, repo *repomgr.Repo, f
 				return nil
 			}
 			recvBuf := buf.Bytes()
-			rsp.Write(recvBuf[pos : pos+end-start+1])
+			_, _ = rsp.Write(recvBuf[pos : pos+end-start+1])
 			return nil
 		}
 
@@ -854,7 +858,7 @@ func downloadZipFile(rsp http.ResponseWriter, r *http.Request, data, repoID, use
 	}
 
 	ar := zip.NewWriter(rsp)
-	defer ar.Close()
+	defer func() { _ = ar.Close() }()
 
 	if op == "download-dir" || op == "download-dir-link" {
 		dirName, ok := obj["dir_name"].(string)
@@ -1075,7 +1079,9 @@ func packFiles(ar *zip.Writer, dirent *fsmgr.SeafDirent, repo *repomgr.Repo, par
 	if cryptKey != nil {
 		for _, blkID := range file.BlkIDs {
 			var buf bytes.Buffer
-			blockmgr.Read(repo.StoreID, blkID, &buf)
+			if err := blockmgr.Read(repo.StoreID, blkID, &buf); err != nil {
+				return fmt.Errorf("failed to read block %s: %v", blkID, err)
+			}
 			decoded, err := cryptKey.decrypt(buf.Bytes())
 			if err != nil {
 				err := fmt.Errorf("failed to decrypt block %s: %v", blkID, err)
@@ -1179,7 +1185,7 @@ func doUpload(rsp http.ResponseWriter, r *http.Request, fsm *recvData, isAjax bo
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		return &appError{nil, "", http.StatusBadRequest}
 	}
-	defer r.MultipartForm.RemoveAll()
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	repoID := fsm.repoID
 	user := fsm.user
@@ -1251,7 +1257,7 @@ func doUpload(rsp http.ResponseWriter, r *http.Request, fsm *recvData, isAjax bo
 		if fsm.rend != fsm.fsize-1 {
 			rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
 			success := "{\"success\": true}"
-			rsp.Write([]byte(success))
+			_, _ = rsp.Write([]byte(success))
 
 			return nil
 		}
@@ -1356,7 +1362,7 @@ func writeBlockDataToTmpFile(r *http.Request, fsm *recvData, formFiles map[strin
 		err := fmt.Errorf("failed to open file for read: %v", err)
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var f *os.File
 	filePath := filepath.Join("/", parentDir, filename)
@@ -1367,7 +1373,9 @@ func writeBlockDataToTmpFile(r *http.Request, fsm *recvData, formFiles map[strin
 		if err != nil {
 			return err
 		}
-		repomgr.AddUploadTmpFile(repoID, filePath, f.Name())
+		if err := repomgr.AddUploadTmpFile(repoID, filePath, f.Name()); err != nil {
+			log.Warnf("failed to add upload tmp file for repo %s path %s: %v", repoID, filePath, err)
+		}
 		tmpFile = f.Name()
 	} else {
 		f, err = os.OpenFile(tmpFile, os.O_WRONLY|os.O_CREATE, 0666)
@@ -1381,9 +1389,13 @@ func writeBlockDataToTmpFile(r *http.Request, fsm *recvData, formFiles map[strin
 		fsm.files = append(fsm.files, tmpFile)
 	}
 
-	f.Seek(fsm.rstart, 0)
-	io.Copy(f, file)
-	f.Close()
+	if _, err := f.Seek(fsm.rstart, 0); err != nil {
+		return fmt.Errorf("failed to seek tmp file: %v", err)
+	}
+	if _, err := io.Copy(f, file); err != nil {
+		return fmt.Errorf("failed to copy to tmp file: %v", err)
+	}
+	_ = f.Close()
 
 	return nil
 }
@@ -1592,9 +1604,11 @@ func clearTmpFile(fsm *recvData, parentDir string) {
 		filePath := filepath.Join("/", parentDir, fsm.fileNames[0])
 		tmpFile, err := repomgr.GetUploadTmpFile(fsm.repoID, filePath)
 		if err == nil && tmpFile != "" {
-			os.Remove(tmpFile)
+			_ = os.Remove(tmpFile)
 		}
-		repomgr.DelUploadTmpFile(fsm.repoID, filePath)
+		if err := repomgr.DelUploadTmpFile(fsm.repoID, filePath); err != nil {
+			log.Warnf("failed to delete upload tmp file for repo %s path %s: %v", fsm.repoID, filePath, err)
+		}
 	}
 }
 
@@ -1811,7 +1825,7 @@ func postMultiFiles(rsp http.ResponseWriter, r *http.Request, repoID, parentDir,
 	_, ok := r.Form["ret-json"]
 	if ok || isAjax {
 		rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
-		rsp.Write([]byte(retStr))
+		_, _ = rsp.Write([]byte(retStr))
 	} else {
 		var array []map[string]interface{}
 		err := json.Unmarshal([]byte(retStr), &array)
@@ -1832,7 +1846,7 @@ func postMultiFiles(rsp http.ResponseWriter, r *http.Request, repoID, parentDir,
 			ids = append(ids, id)
 		}
 		newIDs := strings.Join(ids, "\t")
-		rsp.Write([]byte(newIDs))
+		_, _ = rsp.Write([]byte(newIDs))
 	}
 
 	return nil
@@ -2023,7 +2037,9 @@ func fastForwardOrMerge(user, token string, repo *repomgr.Repo, base, newCommit 
 	var lastGCID string
 	if checkGC {
 		lastGCID, _ = repomgr.GetLastGCID(repo.ID, token)
-		repomgr.RemoveLastGCID(repo.ID, token)
+		if err := repomgr.RemoveLastGCID(repo.ID, token); err != nil {
+			log.Warnf("failed to remove last GC ID for repo %s: %v", repo.ID, err)
+		}
 	}
 	for {
 		retry, err := genCommitNeedRetry(repo, base, newCommit, newCommit.RootID, user, true, nil, lastGCID, checkGC)
@@ -2146,14 +2162,14 @@ func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID
 		var gcID sql.NullString
 		if err := row.Scan(&gcID); err != nil {
 			if err != sql.ErrNoRows {
-				trans.Rollback()
+				_ = trans.Rollback()
 				return false, err
 			}
 		}
 
 		if lastGCID != gcID.String {
 			err = fmt.Errorf("head branch update for repo %s conflicts with GC", repoID)
-			trans.Rollback()
+			_ = trans.Rollback()
 			return true, ErrGCConflict
 		}
 	}
@@ -2165,12 +2181,12 @@ func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID
 	row = trans.QueryRowContext(ctx, sqlStr, name, repoID)
 	if err := row.Scan(&commitID); err != nil {
 		if err != sql.ErrNoRows {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return false, err
 		}
 	}
 	if oldCommitID != commitID {
-		trans.Rollback()
+		_ = trans.Rollback()
 		err := fmt.Errorf("head commit id has changed")
 		return false, err
 	}
@@ -2178,11 +2194,13 @@ func updateBranch(repoID, originRepoID, newCommitID, oldCommitID, secondParentID
 	sqlStr = "UPDATE Branch SET commit_id = ? WHERE name = ? AND repo_id = ?"
 	_, err = trans.ExecContext(ctx, sqlStr, newCommitID, name, repoID)
 	if err != nil {
-		trans.Rollback()
+		_ = trans.Rollback()
 		return false, err
 	}
 
-	trans.Commit()
+	if err := trans.Commit(); err != nil {
+		return false, fmt.Errorf("failed to commit branch update: %v", err)
+	}
 
 	if secondParentID != "" {
 		if err := onBranchUpdated(repoID, secondParentID, false); err != nil {
@@ -2544,7 +2562,7 @@ func indexFileWorker(args ...any) error {
 			resChan <- &indexFileResult{err: err}
 			return nil
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		fileInfo, err := f.Stat()
 		if err != nil {
 			err := fmt.Errorf("failed to stat file %s: %v", filePath, err)
@@ -2710,7 +2728,7 @@ func chunkFile(job chunkingData) (string, error) {
 			err := fmt.Errorf("failed to open file for read: %v", err)
 			return "", err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		file = f
 	} else {
 		f, err := os.Open(filePath)
@@ -2718,7 +2736,7 @@ func chunkFile(job chunkingData) (string, error) {
 			err := fmt.Errorf("failed to open file for read: %v", err)
 			return "", err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		file = f
 	}
 	_, err := file.Seek(offset, io.SeekStart)
@@ -3120,7 +3138,7 @@ func doUpdate(rsp http.ResponseWriter, r *http.Request, fsm *recvData, isAjax bo
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		return &appError{nil, "", http.StatusBadRequest}
 	}
-	defer r.MultipartForm.RemoveAll()
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	repoID := fsm.repoID
 	user := fsm.user
@@ -3173,7 +3191,7 @@ func doUpdate(rsp http.ResponseWriter, r *http.Request, fsm *recvData, isAjax bo
 		if fsm.rend != fsm.fsize-1 {
 			rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
 			success := "{\"success\": true}"
-			rsp.Write([]byte(success))
+			_, _ = rsp.Write([]byte(success))
 
 			return nil
 		}
@@ -3346,9 +3364,9 @@ func putFile(rsp http.ResponseWriter, r *http.Request, repoID, parentDir, user, 
 				err := fmt.Errorf("failed to format json data")
 				return &appError{err, "", http.StatusInternalServerError}
 			}
-			rsp.Write(retJSON)
+			_, _ = rsp.Write(retJSON)
 		} else {
-			rsp.Write([]byte(fileID))
+			_, _ = rsp.Write([]byte(fileID))
 		}
 		return nil
 	}
@@ -3385,9 +3403,9 @@ func putFile(rsp http.ResponseWriter, r *http.Request, repoID, parentDir, user, 
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 		rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
-		rsp.Write(retJSON)
+		_, _ = rsp.Write(retJSON)
 	} else {
-		rsp.Write([]byte(fileID))
+		_, _ = rsp.Write([]byte(fileID))
 	}
 
 	go mergeVirtualRepoPool.AddTask(repo.ID)
@@ -3450,7 +3468,7 @@ func doUploadBlks(rsp http.ResponseWriter, r *http.Request, fsm *recvData) *appE
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		return &appError{nil, "", http.StatusBadRequest}
 	}
-	defer r.MultipartForm.RemoveAll()
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	repoID := fsm.repoID
 	user := fsm.user
@@ -3536,12 +3554,12 @@ func doUploadBlks(rsp http.ResponseWriter, r *http.Request, fsm *recvData) *appE
 			return &appError{err, "", http.StatusInternalServerError}
 		}
 		rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
-		rsp.Write([]byte(jsonstr))
+		_, _ = rsp.Write([]byte(jsonstr))
 	} else {
 		rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
-		rsp.Write([]byte("\""))
-		rsp.Write([]byte(fileID))
-		rsp.Write([]byte("\""))
+		_, _ = rsp.Write([]byte("\""))
+		_, _ = rsp.Write([]byte(fileID))
+		_, _ = rsp.Write([]byte("\""))
 	}
 
 	return nil
@@ -3688,7 +3706,7 @@ func doUploadRawBlks(rsp http.ResponseWriter, r *http.Request, fsm *recvData) *a
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		return &appError{nil, "", http.StatusBadRequest}
 	}
-	defer r.MultipartForm.RemoveAll()
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	repoID := fsm.repoID
 	user := fsm.user
@@ -3734,7 +3752,7 @@ func doUploadRawBlks(rsp http.ResponseWriter, r *http.Request, fsm *recvData) *a
 	sendStatisticMsg(repoID, user, oper, uint64(contentLen))
 
 	rsp.Header().Set("Content-Type", "application/json; charset=utf-8")
-	rsp.Write([]byte("\"OK\""))
+	_, _ = rsp.Write([]byte("\"OK\""))
 
 	return nil
 }

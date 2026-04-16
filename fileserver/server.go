@@ -174,9 +174,11 @@ func registerCA(capath string) {
 	if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
 		log.Fatal("Failed to append PEM.")
 	}
-	mysql.RegisterTLSConfig("custom", &tls.Config{
+	if err := mysql.RegisterTLSConfig("custom", &tls.Config{
 		RootCAs: rootCertPool,
-	})
+	}); err != nil {
+		log.Fatalf("Failed to register TLS config: %v", err)
+	}
 }
 
 func writePidFile(pid_file_path string) error {
@@ -186,7 +188,7 @@ func writePidFile(pid_file_path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	_, err = fmt.Fprintf(file, "%d", os.Getpid())
 	return err
@@ -277,7 +279,9 @@ func Run(args []string) error {
 		logFp = fp
 		log.SetOutput(fp)
 		logToStdout = false
-		utils.Dup(int(logFp.Fd()), int(os.Stderr.Fd()))
+		if err := utils.Dup(int(logFp.Fd()), int(os.Stderr.Fd())); err != nil {
+			log.Warnf("Failed to dup stderr to log file: %v", err)
+		}
 	} else {
 		logToStdout = true
 	}
@@ -434,11 +438,13 @@ func logRotate() {
 	}
 	log.SetOutput(fp)
 	if logFp != nil {
-		logFp.Close()
+		_ = logFp.Close()
 		logFp = fp
 	}
 
-	utils.Dup(int(logFp.Fd()), int(os.Stderr.Fd()))
+	if err := utils.Dup(int(logFp.Fd()), int(os.Stderr.Fd())); err != nil {
+		log.Warnf("Failed to dup stderr to log file: %v", err)
+	}
 }
 
 func newHTTPRouter() *mux.Router {
@@ -544,7 +550,7 @@ func newHTTPRouter() *mux.Router {
 }
 
 func handleProtocolVersion(rsp http.ResponseWriter, r *http.Request) {
-	io.WriteString(rsp, "{\"version\": 2}")
+	_, _ = io.WriteString(rsp, "{\"version\": 2}")
 }
 
 type appError struct {

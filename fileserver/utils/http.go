@@ -34,7 +34,7 @@ func HttpCommon(method, url string, header map[string][]string, reader io.Reader
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
-	defer rsp.Body.Close()
+	defer func() { _ = rsp.Body.Close() }()
 
 	if rsp.StatusCode != http.StatusOK {
 		errMsg := parseErrorMessage(rsp.Body)

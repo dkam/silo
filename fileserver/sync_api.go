@@ -182,7 +182,7 @@ func getFsId(args ...interface{}) error {
 
 	rsp.Header().Set("Content-Length", strconv.Itoa(len(objList)))
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(objList)
+	_, _ = rsp.Write(objList)
 
 	resChan <- &calResult{user, nil}
 
@@ -319,7 +319,7 @@ func getBlockMapCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	rsp.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(data)
+	_, _ = rsp.Write(data)
 
 	return nil
 }
@@ -425,7 +425,7 @@ func getAccessibleRepoListCB(rsp http.ResponseWriter, r *http.Request) *appError
 	}
 	rsp.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(data)
+	_, _ = rsp.Write(data)
 	return nil
 }
 
@@ -567,7 +567,7 @@ func postCheckExistCB(rsp http.ResponseWriter, r *http.Request, existType checkE
 	}
 	rsp.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(data)
+	_, _ = rsp.Write(data)
 
 	return nil
 }
@@ -622,7 +622,7 @@ func packFSCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	rsp.Header().Set("Content-Length", strconv.Itoa(data.Len()))
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(data.Bytes())
+	_, _ = rsp.Write(data.Bytes())
 	return nil
 }
 
@@ -660,7 +660,7 @@ func headCommitsMultiCB(rsp http.ResponseWriter, r *http.Request) *appError {
 		return &appError{err, "", http.StatusInternalServerError}
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	commitIDMap := make(map[string]string)
 	var repoID string
@@ -684,7 +684,7 @@ func headCommitsMultiCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	rsp.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(data)
+	_, _ = rsp.Write(data)
 
 	return nil
 }
@@ -745,7 +745,7 @@ func getJWTTokenCB(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	data := fmt.Sprintf("{\"jwt_token\":\"%s\"}", tokenString)
 
-	rsp.Write([]byte(data))
+	_, _ = rsp.Write([]byte(data))
 
 	return nil
 }
@@ -999,7 +999,7 @@ func getCommitInfo(rsp http.ResponseWriter, r *http.Request) *appError {
 	dataLen := strconv.Itoa(data.Len())
 	rsp.Header().Set("Content-Length", dataLen)
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write(data.Bytes())
+	_, _ = rsp.Write(data.Bytes())
 
 	return nil
 }
@@ -1219,7 +1219,7 @@ func getHeadCommit(rsp http.ResponseWriter, r *http.Request) *appError {
 			log.Errorf("DB error when check repo %s existence: %v", repoID, err)
 			msg := `{"is_corrupted": 1}`
 			rsp.WriteHeader(http.StatusOK)
-			rsp.Write([]byte(msg))
+			_, _ = rsp.Write([]byte(msg))
 			return nil
 		}
 	}
@@ -1240,7 +1240,7 @@ func getHeadCommit(rsp http.ResponseWriter, r *http.Request) *appError {
 			log.Errorf("DB error when get branch master: %v", err)
 			msg := `{"is_corrupted": 1}`
 			rsp.WriteHeader(http.StatusOK)
-			rsp.Write([]byte(msg))
+			_, _ = rsp.Write([]byte(msg))
 			return nil
 		}
 	}
@@ -1250,7 +1250,7 @@ func getHeadCommit(rsp http.ResponseWriter, r *http.Request) *appError {
 
 	msg := fmt.Sprintf("{\"is_corrupted\": 0, \"head_commit_id\": \"%s\"}", commitID)
 	rsp.WriteHeader(http.StatusOK)
-	rsp.Write([]byte(msg))
+	_, _ = rsp.Write([]byte(msg))
 	return nil
 }
 

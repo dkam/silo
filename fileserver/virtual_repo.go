@@ -160,16 +160,24 @@ func mergeRepo(repoID string) error {
 			err := fmt.Errorf("failed to update root of virtual repo %.10s", repoID)
 			return err
 		}
-		repomgr.SetVirtualRepoBaseCommitPath(repo.ID, origRepo.HeadCommitID, vInfo.Path)
+		if err := repomgr.SetVirtualRepoBaseCommitPath(repo.ID, origRepo.HeadCommitID, vInfo.Path); err != nil {
+			log.Warnf("failed to set virtual repo base commit path for repo %s: %v", repo.ID, err)
+		}
 	} else if baseRoot == origRoot {
 		newBaseCommit, err := updateDir(vInfo.OriginRepoID, vInfo.Path, root, head.CreatorName, origHead.CommitID)
 		if err != nil {
 			err := fmt.Errorf("merge repo %.8s failed: failed to update origin repo%.10s path %s", repoID, vInfo.OriginRepoID, vInfo.Path)
 			return err
 		}
-		repomgr.SetVirtualRepoBaseCommitPath(repo.ID, newBaseCommit, vInfo.Path)
-		cleanupVirtualRepos(vInfo.OriginRepoID)
-		mergeVirtualRepo(vInfo.OriginRepoID, repoID)
+		if err := repomgr.SetVirtualRepoBaseCommitPath(repo.ID, newBaseCommit, vInfo.Path); err != nil {
+			log.Warnf("failed to set virtual repo base commit path for repo %s: %v", repo.ID, err)
+		}
+		if err := cleanupVirtualRepos(vInfo.OriginRepoID); err != nil {
+			log.Warnf("failed to cleanup virtual repos for %s: %v", vInfo.OriginRepoID, err)
+		}
+		if err := mergeVirtualRepo(vInfo.OriginRepoID, repoID); err != nil {
+			log.Warnf("failed to merge virtual repo for origin %s: %v", vInfo.OriginRepoID, err)
+		}
 	} else {
 		roots := []string{baseRoot, origRoot, root}
 		opt := new(mergeOptions)
@@ -193,9 +201,15 @@ func mergeRepo(repoID string) error {
 			err := fmt.Errorf("merge repo %.10s failed: failed to update origin repo %.10s path %s", repoID, vInfo.OriginRepoID, vInfo.Path)
 			return err
 		}
-		repomgr.SetVirtualRepoBaseCommitPath(repo.ID, newBaseCommit, vInfo.Path)
-		cleanupVirtualRepos(vInfo.OriginRepoID)
-		mergeVirtualRepo(vInfo.OriginRepoID, repoID)
+		if err := repomgr.SetVirtualRepoBaseCommitPath(repo.ID, newBaseCommit, vInfo.Path); err != nil {
+			log.Warnf("failed to set virtual repo base commit path for repo %s: %v", repo.ID, err)
+		}
+		if err := cleanupVirtualRepos(vInfo.OriginRepoID); err != nil {
+			log.Warnf("failed to cleanup virtual repos for %s: %v", vInfo.OriginRepoID, err)
+		}
+		if err := mergeVirtualRepo(vInfo.OriginRepoID, repoID); err != nil {
+			log.Warnf("failed to merge virtual repo for origin %s: %v", vInfo.OriginRepoID, err)
+		}
 	}
 
 	return nil
@@ -223,7 +237,9 @@ func cleanupVirtualRepos(repoID string) error {
 		_, err := fsmgr.GetSeafdirByPath(repo.StoreID, head.RootID, vInfo.Path)
 		if err != nil {
 			if err == fsmgr.ErrPathNoExist {
-				handleMissingVirtualRepo(repo, head, vInfo)
+				if _, err := handleMissingVirtualRepo(repo, head, vInfo); err != nil {
+					log.Warnf("failed to handle missing virtual repo %s: %v", vInfo.RepoID, err)
+				}
 			}
 		}
 	}
@@ -255,7 +271,9 @@ func handleMissingVirtualRepo(repo *repomgr.Repo, head *commitmgr.Commit, vInfo 
 		if err != nil || oldDirID == "" {
 
 			if err == fsmgr.ErrPathNoExist {
-				repomgr.DelVirtualRepo(vInfo.RepoID, option.CloudMode)
+				if delErr := repomgr.DelVirtualRepo(vInfo.RepoID, option.CloudMode); delErr != nil {
+					log.Warnf("failed to delete virtual repo %s: %v", vInfo.RepoID, delErr)
+				}
 			}
 			err := fmt.Errorf("failed to find %s under commit %s in repo %s", parPath, parent.CommitID, repo.StoreID)
 			return "", err
@@ -269,7 +287,9 @@ func handleMissingVirtualRepo(repo *repomgr.Repo, head *commitmgr.Commit, vInfo 
 					} else {
 						newPath = filepath.Join("/", de.NewName)
 					}
-					repomgr.SetVirtualRepoBaseCommitPath(vInfo.RepoID, head.CommitID, newPath)
+					if err := repomgr.SetVirtualRepoBaseCommitPath(vInfo.RepoID, head.CommitID, newPath); err != nil {
+						log.Warnf("failed to set virtual repo base commit path for repo %s: %v", vInfo.RepoID, err)
+					}
 					returnPath = newPath
 					if subPath == "" {
 						newName := filepath.Base(newPath)
@@ -297,7 +317,9 @@ func handleMissingVirtualRepo(repo *repomgr.Repo, head *commitmgr.Commit, vInfo 
 	}
 
 	if !isRenamed {
-		repomgr.DelVirtualRepo(vInfo.RepoID, option.CloudMode)
+		if err := repomgr.DelVirtualRepo(vInfo.RepoID, option.CloudMode); err != nil {
+			log.Warnf("failed to delete virtual repo %s: %v", vInfo.RepoID, err)
+		}
 	}
 
 	return returnPath, nil
@@ -367,7 +389,9 @@ func editRepoNeedRetry(repoID, name, desc, user string) (bool, error) {
 		return true, nil
 	}
 
-	repomgr.UpdateRepoInfo(repoID, commit.CommitID)
+	if err := repomgr.UpdateRepoInfo(repoID, commit.CommitID); err != nil {
+		log.Warnf("failed to update repo info for %s: %v", repoID, err)
+	}
 
 	return true, nil
 }

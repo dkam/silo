@@ -79,7 +79,7 @@ func getUserGroups(sqlStr string, args ...interface{}) ([]group, error) {
 		return nil, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var groups []group
 	var g group
@@ -159,7 +159,7 @@ func getGroupPaths(sqlStr string) (string, error) {
 		return paths, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var path string
 	for rows.Next() {
@@ -206,7 +206,7 @@ func checkGroupPermByUser(repoID string, userName string) (string, error) {
 		return "", err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var perm string
 	var origPerm string
@@ -308,7 +308,7 @@ func getSharedDirsToUser(originRepoID string, toEmail string) (map[string]string
 		return nil, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var path string
 	var perm string
@@ -368,7 +368,7 @@ func getSharedDirsToGroup(originRepoID string, groups []group) (map[string]strin
 		return nil, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var path string
 	var perm string
@@ -454,7 +454,7 @@ func GetReposByOwner(email string) ([]*SharedRepo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	rows, err := stmt.QueryContext(ctx, email)
 
@@ -462,7 +462,7 @@ func GetReposByOwner(email string) ([]*SharedRepo, error) {
 		return nil, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		repo := new(SharedRepo)
@@ -511,14 +511,14 @@ func ListInnerPubRepos() ([]*SharedRepo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	rows, err := stmt.QueryContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var repos []*SharedRepo
 	for rows.Next() {
@@ -584,14 +584,14 @@ func ListShareRepos(email, columnType string) ([]*SharedRepo, error) {
 		return nil, err
 	}
 
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	rows, err := stmt.QueryContext(ctx, email)
 	if err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		repo := new(SharedRepo)
@@ -665,7 +665,7 @@ func GetGroupReposByUser(user string, orgID int) ([]*SharedRepo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var repos []*SharedRepo
 	for rows.Next() {

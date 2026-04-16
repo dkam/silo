@@ -85,14 +85,14 @@ func Get(id string) *Repo {
 		log.Errorf("failed to prepare sql : %s ：%v", query, err)
 		return nil
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	rows, err := stmt.QueryContext(ctx, id)
 	if err != nil {
 		log.Errorf("failed to query sql : %v", err)
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	repo := new(Repo)
 
@@ -217,14 +217,14 @@ func GetEx(id string) *Repo {
 		repo.IsCorrupted = true
 		return repo
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	rows, err := stmt.QueryContext(ctx, id)
 	if err != nil {
 		repo.IsCorrupted = true
 		return repo
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var originRepoID sql.NullString
 	var path sql.NullString
@@ -328,7 +328,7 @@ func GetVirtualRepoInfoByOrigin(originRepo string) ([]*VRepoInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer row.Close()
+	defer func() { _ = row.Close() }()
 	for row.Next() {
 		vRepoInfo := new(VRepoInfo)
 		if err := row.Scan(&vRepoInfo.RepoID, &vRepoInfo.OriginRepoID, &vRepoInfo.Path, &vRepoInfo.BaseCommitID); err != nil {
@@ -568,7 +568,7 @@ func GetVirtualRepoIDsByOrigin(repoID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer row.Close()
+	defer func() { _ = row.Close() }()
 	for row.Next() {
 		if err := row.Scan(&id); err != nil {
 			if err != sql.ErrNoRows {
@@ -612,7 +612,7 @@ func removeVirtualRepoOndisk(repoID string, cloudMode bool) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var name, id, commitID string
 		if err := rows.Scan(&name, &id, &commitID); err != nil {
@@ -857,7 +857,7 @@ func ListRepoTokensByEmail(email string) ([]RepoToken, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list repo tokens: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tokens []RepoToken
 	for rows.Next() {
@@ -894,7 +894,7 @@ func CreateRepo(name, owner string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to begin transaction: %v", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, "INSERT INTO Repo (repo_id) VALUES (?)", repoID); err != nil {
 		return "", fmt.Errorf("failed to insert repo: %v", err)
@@ -930,7 +930,7 @@ func DeleteRepo(repoID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %v", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	deletes := []string{
 		"DELETE FROM Repo WHERE repo_id = ?",

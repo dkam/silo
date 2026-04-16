@@ -147,7 +147,7 @@ func ListReposHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	repos := scanRepos(rows)
 	seen := make(map[string]bool, len(repos))
@@ -162,7 +162,7 @@ func ListReposHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Failed to query shared repos: %v", err)
 	} else {
-		defer sharedRows.Close()
+		defer func() { _ = sharedRows.Close() }()
 		for _, r := range scanRepos(sharedRows) {
 			if !seen[r.ID] {
 				seen[r.ID] = true

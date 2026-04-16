@@ -135,13 +135,13 @@ func OpenSQLite(path string) (*DBPair, error) {
 	// Verify WAL mode is set on the write connection
 	var journalMode string
 	if err := writeDB.QueryRow("PRAGMA journal_mode").Scan(&journalMode); err != nil {
-		writeDB.Close()
+		_ = writeDB.Close()
 		return nil, fmt.Errorf("failed to check journal mode: %v", err)
 	}
 	if journalMode != "wal" {
 		// Set WAL explicitly if pragma DSN didn't work
 		if _, err := writeDB.Exec("PRAGMA journal_mode=WAL"); err != nil {
-			writeDB.Close()
+			_ = writeDB.Close()
 			return nil, fmt.Errorf("failed to set WAL mode: %v", err)
 		}
 	}
@@ -158,7 +158,7 @@ func OpenSQLite(path string) (*DBPair, error) {
 	readDSN := fmt.Sprintf("file:%s?_pragma=journal_mode%%3DWAL&_pragma=busy_timeout%%3D5000&_pragma=synchronous%%3DNORMAL&_pragma=foreign_keys%%3DON&_pragma=query_only%%3DON", path)
 	readDB, err := sql.Open("sqlite", readDSN)
 	if err != nil {
-		writeDB.Close()
+		_ = writeDB.Close()
 		return nil, fmt.Errorf("failed to open sqlite read connection: %v", err)
 	}
 	readDB.SetMaxOpenConns(4)

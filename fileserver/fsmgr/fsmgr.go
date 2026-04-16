@@ -323,7 +323,9 @@ func initZlibReader() (io.ReadCloser, error) {
 	// Since the corresponding reader has not been obtained when zlib is initialized,
 	// an io.Reader needs to be built to initialize zlib.
 	w := zlib.NewWriter(&buf)
-	w.Close()
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close zlib writer: %v", err)
+	}
 
 	r, err := zlib.NewReader(&buf)
 	if err != nil {
@@ -434,11 +436,11 @@ func uncompress(p []byte, reader io.ReadCloser) ([]byte, error) {
 
 		_, err = io.Copy(&out, r)
 		if err != nil {
-			r.Close()
+			_ = r.Close()
 			return nil, err
 		}
 
-		r.Close()
+		_ = r.Close()
 		return out.Bytes(), nil
 	}
 
@@ -463,11 +465,13 @@ func compress(p []byte) ([]byte, error) {
 
 	_, err := w.Write(p)
 	if err != nil {
-		w.Close()
+		_ = w.Close()
 		return nil, err
 	}
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
 
 	return out.Bytes(), nil
 }

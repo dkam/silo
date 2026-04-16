@@ -69,7 +69,7 @@ func (c *APIClient) doRequest(method, path string, body, result interface{}) err
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized && c.hasCreds() {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err := c.reloginIfStale(tokenUsed); err != nil {
 			return fmt.Errorf("re-login failed: %v", err)
 		}
@@ -78,7 +78,7 @@ func (c *APIClient) doRequest(method, path string, body, result interface{}) err
 			return err
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		msg, _ := io.ReadAll(resp.Body)
@@ -146,7 +146,7 @@ func (c *APIClient) reloginLocked() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		msg, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%s: %s", resp.Status, string(msg))
@@ -236,7 +236,7 @@ func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
 	if err != nil {
 		return fmt.Errorf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusFound {
 		// Follow the redirect to /files/{token}/filename
@@ -252,7 +252,7 @@ func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
 		if err != nil {
 			return fmt.Errorf("download failed: %v", err)
 		}
-		defer fileResp.Body.Close()
+		defer func() { _ = fileResp.Body.Close() }()
 
 		if fileResp.StatusCode >= 400 {
 			msg, _ := io.ReadAll(fileResp.Body)
@@ -263,7 +263,7 @@ func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create local file: %v", err)
 		}
-		defer out.Close()
+		defer func() { _ = out.Close() }()
 
 		if _, err := io.Copy(out, fileResp.Body); err != nil {
 			return fmt.Errorf("failed to write file: %v", err)
@@ -303,7 +303,7 @@ func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -322,7 +322,9 @@ func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {
 	if _, err := io.Copy(part, file); err != nil {
 		return fmt.Errorf("failed to copy file content: %v", err)
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %v", err)
+	}
 
 	// Step 3: POST to /upload-api/{token}
 	uploadURL := fmt.Sprintf("%s/upload-api/%s", c.BaseURL, tokenResp.Token)
@@ -336,7 +338,7 @@ func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {
 	if err != nil {
 		return fmt.Errorf("upload failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		msg, _ := io.ReadAll(resp.Body)

@@ -108,7 +108,7 @@ func TestOpenSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer pair.Close()
+	defer func() { _ = pair.Close() }()
 
 	if pair.Read == nil || pair.Write == nil {
 		t.Fatal("expected non-nil Read and Write handles")
@@ -135,7 +135,7 @@ func TestOpenSQLiteCreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	pair.Close()
+	_ = pair.Close()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Fatal("expected database file to be created")
@@ -152,7 +152,7 @@ func TestDBPairCloseShared(t *testing.T) {
 		t.Fatalf("failed to open test db: %v", err)
 	}
 	// Make Read point to same handle as Write (MySQL behavior)
-	pair.Read.Close()
+	_ = pair.Read.Close()
 	pair.Read = pair.Write
 
 	if err := pair.Close(); err != nil {
@@ -168,7 +168,7 @@ func TestSQLiteUpsertIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer pair.Close()
+	defer func() { _ = pair.Close() }()
 
 	DBEngine = "sqlite"
 
@@ -214,7 +214,7 @@ func TestSQLiteInsertOrIgnoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer pair.Close()
+	defer func() { _ = pair.Close() }()
 
 	DBEngine = "sqlite"
 
@@ -252,7 +252,7 @@ func TestSQLiteReadWriteSplit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer pair.Close()
+	defer func() { _ = pair.Close() }()
 
 	if _, err := pair.Write.Exec("CREATE TABLE nums (n INTEGER)"); err != nil {
 		t.Fatalf("create table failed: %v", err)
@@ -292,7 +292,7 @@ func TestSQLiteReadPreparedStatement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer pair.Close()
+	defer func() { _ = pair.Close() }()
 
 	if _, err := pair.Write.Exec("CREATE TABLE kv (k TEXT PRIMARY KEY, v INTEGER)"); err != nil {
 		t.Fatalf("create table failed: %v", err)
@@ -312,7 +312,7 @@ func TestSQLiteReadPreparedStatement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare on read conn failed: %v", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for i := 0; i < 40; i++ {
 		key := fmt.Sprintf("key-%d", i%20)
@@ -365,7 +365,7 @@ func TestSQLiteWriteTransactionNoHang(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer pair.Close()
+	defer func() { _ = pair.Close() }()
 
 	if _, err := pair.Write.Exec("CREATE TABLE branch (repo TEXT PRIMARY KEY, commit_id TEXT)"); err != nil {
 		t.Fatalf("create table failed: %v", err)

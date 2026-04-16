@@ -20,11 +20,11 @@ func createFile() error {
 	if err != nil {
 		return err
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	outputString := "hello world!\n"
 	for i := 0; i < 10; i++ {
-		outputFile.WriteString(outputString)
+		_, _ = outputFile.WriteString(outputString)
 	}
 
 	return nil
@@ -64,10 +64,10 @@ func testWrite(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to open test file : %v\n", err)
 	}
-	defer inputFile.Close()
+	defer func() { _ = inputFile.Close() }()
 
 	bend := New(seafileConfPath, seafileDataDir, "commit")
-	bend.Write(repoID, objID, inputFile, true)
+	_ = bend.Write(repoID, objID, inputFile, true)
 }
 
 func testRead(t *testing.T) {
@@ -75,7 +75,7 @@ func testRead(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to open test file:%v\n", err)
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	bend := New(seafileConfPath, seafileDataDir, "commit")
 	err = bend.Read(repoID, objID, outputFile)

@@ -1,16 +1,15 @@
 version: "2"
 
 run:
-  timeout: 2m
+  timeout: 5m
 
 linters:
   enable:
+   - errcheck
    - govet
    - ineffassign
    - staticcheck
    - unused
-  disable:
-   - errcheck
 
 formatters:
   enable:

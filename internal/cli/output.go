@@ -30,7 +30,7 @@ func printReposText(w io.Writer, repos []client.Repo) {
 		if r.Encrypted {
 			enc = " [encrypted]"
 		}
-		fmt.Fprintf(w, "%s  %-16s  %s%s\n", r.ID, updated, name, enc)
+		_, _ = fmt.Fprintf(w, "%s  %-16s  %s%s\n", r.ID, updated, name, enc)
 	}
 }
 
@@ -48,6 +48,6 @@ func printDirText(w io.Writer, entries []client.DirEntry) {
 		if e.Mtime > 0 {
 			mtime = time.Unix(e.Mtime, 0).Format("2006-01-02 15:04")
 		}
-		fmt.Fprintf(w, "%s  %10s  %-16s  %s\n", kind, size, mtime, e.Name)
+		_, _ = fmt.Fprintf(w, "%s  %10s  %-16s  %s\n", kind, size, mtime, e.Name)
 	}
 }

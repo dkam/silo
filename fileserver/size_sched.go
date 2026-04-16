@@ -159,7 +159,7 @@ func setRepoSizeAndFileCount(repoID, newHeadID string, size, fileCount int64) er
 	row := trans.QueryRowContext(ctx, sqlStr, repoID)
 	if err := row.Scan(&headID); err != nil {
 		if err != sql.ErrNoRows {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return err
 		}
 	}
@@ -168,14 +168,14 @@ func setRepoSizeAndFileCount(repoID, newHeadID string, size, fileCount int64) er
 		sqlStr := "INSERT INTO RepoSize (repo_id, size, head_id) VALUES (?, ?, ?)"
 		_, err = trans.ExecContext(ctx, sqlStr, repoID, size, newHeadID)
 		if err != nil {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return err
 		}
 	} else {
 		sqlStr = "UPDATE RepoSize SET size = ?, head_id = ? WHERE repo_id = ?"
 		_, err = trans.ExecContext(ctx, sqlStr, size, newHeadID, repoID)
 		if err != nil {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return err
 		}
 	}
@@ -185,7 +185,7 @@ func setRepoSizeAndFileCount(repoID, newHeadID string, size, fileCount int64) er
 	row = trans.QueryRowContext(ctx, sqlStr, repoID)
 	if err := row.Scan(&exist); err != nil {
 		if err != sql.ErrNoRows {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return err
 		}
 	}
@@ -194,19 +194,21 @@ func setRepoSizeAndFileCount(repoID, newHeadID string, size, fileCount int64) er
 		sqlStr := "UPDATE RepoFileCount SET file_count=? WHERE repo_id=?"
 		_, err = trans.ExecContext(ctx, sqlStr, fileCount, repoID)
 		if err != nil {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return err
 		}
 	} else {
 		sqlStr := "INSERT INTO RepoFileCount (repo_id,file_count) VALUES (?,?)"
 		_, err = trans.ExecContext(ctx, sqlStr, repoID, fileCount)
 		if err != nil {
-			trans.Rollback()
+			_ = trans.Rollback()
 			return err
 		}
 	}
 
-	trans.Commit()
+	if err := trans.Commit(); err != nil {
+		return fmt.Errorf("failed to commit repo size update: %v", err)
+	}
 
 	return nil
 }

@@ -35,11 +35,11 @@ func createFile() error {
 	if err != nil {
 		return err
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	outputString := "hello world!\n"
 	for i := 0; i < 10; i++ {
-		outputFile.WriteString(outputString)
+		_, _ = outputFile.WriteString(outputString)
 	}
 
 	return nil
@@ -73,7 +73,7 @@ func testBlockWrite(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to open test file : %v\n", err)
 	}
-	defer inputFile.Close()
+	defer func() { _ = inputFile.Close() }()
 
 	err = Write(repoID, blockID, inputFile)
 	if err != nil {
