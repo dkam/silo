@@ -95,6 +95,23 @@ docker run -d -p 8082:8082 -v silo-data:/data \
   ghcr.io/dkam/silo:latest
 ```
 
+Or with Docker Compose — save as `docker-compose.yml`:
+
+```yaml
+services:
+  silo:
+    image: ghcr.io/dkam/silo:latest
+    ports:
+      - "8082:8082"
+    volumes:
+      - /path/to/silo-data:/data
+    environment:
+      SILO_ADMIN_EMAIL: admin@example.com
+      SILO_ADMIN_PASSWORD: changeme
+```
+
+Then `docker compose up -d`.
+
 ### Run the server
 
 ```bash
