@@ -80,7 +80,7 @@ Build and run directly from GitHub — no clone needed:
 
 ```bash
 docker build -t silo https://github.com/dkam/silo.git
-docker run -d -p 8082:8082 -v silo-data:/data \
+docker run -d -p 8082:8082 -v /path/to/silo-data:/data \
   -e SILO_ADMIN_EMAIL=admin@example.com \
   -e SILO_ADMIN_PASSWORD=changeme \
   silo
@@ -89,7 +89,7 @@ docker run -d -p 8082:8082 -v silo-data:/data \
 Multi-arch images (linux/amd64, linux/arm64) are also published to GitHub Container Registry on each release:
 
 ```bash
-docker run -d -p 8082:8082 -v silo-data:/data \
+docker run -d -p 8082:8082 -v /path/to/silo-data:/data \
   -e SILO_ADMIN_EMAIL=admin@example.com \
   -e SILO_ADMIN_PASSWORD=changeme \
   ghcr.io/dkam/silo:latest
@@ -115,11 +115,10 @@ Then `docker compose up -d`.
 ### Run the server
 
 ```bash
-mkdir -p /tmp/silo-data
-SEAFILE_ADMIN_EMAIL=admin@example.com \
-SEAFILE_ADMIN_PASSWORD=changeme \
-SEAFILE_LOG_TO_STDOUT=1 \
-./silo serve -d /tmp/silo-data
+SILO_ADMIN_EMAIL=admin@example.com \
+SILO_ADMIN_PASSWORD=changeme \
+SILO_LOG_TO_STDOUT=1 \
+./silo serve -d /path/to/silo-data
 ```
 
 The server listens on `:8082`. On first run it creates the ccnet and seafile SQLite databases, the storage directory, and the admin user. No config file is required — Silo runs on compiled defaults plus environment variables. If you want to tweak low-level settings (quota defaults, cache limits, cluster options) you can pass a `seafile.conf` with `-C /path/to/seafile.conf`.

@@ -40,6 +40,37 @@ func loadRepoAndCommit(w http.ResponseWriter, repoID, user string) (*repomgr.Rep
 	return repo, head, true
 }
 
+func renameRepoHandler(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUserEmail(r)
+	repoID := mux.Vars(r)["repoid"]
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+	newName := r.FormValue("repo_name")
+	if newName == "" {
+		http.Error(w, "repo_name is required", http.StatusBadRequest)
+		return
+	}
+
+	repo, head, ok := loadRepoAndCommit(w, repoID, user)
+	if !ok {
+		return
+	}
+
+	repo.Name = newName
+	desc := fmt.Sprintf("Renamed library to \"%s\"", newName)
+	_, err := GenNewCommit(repo, head, head.RootID, user, desc, false, "", false)
+	if err != nil {
+		log.Errorf("Failed to commit rename: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func mkdirHandler(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUserEmail(r)
 	vars := mux.Vars(r)
