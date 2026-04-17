@@ -89,12 +89,12 @@ in the initial token creation.
 
 ### Path 3: New management API (our addition, Go-only)
 ```
-Client  → POST /api/v1/auth/login on Go fileserver (port 8082)
+Client  → POST /api/silo/v1/auth/login on Go fileserver (port 8082)
           body: {"email": "...", "password": "..."}
 Go      → validates against EmailUser table directly
         ← JWT session token (24hr)
 
-Client  → POST /api/v1/access-tokens (with Bearer JWT)
+Client  → POST /api/silo/v1/access-tokens (with Bearer JWT)
         ← short-lived file access token
 
 Client  → GET /files/{token}/file.pdf
@@ -108,7 +108,7 @@ for new clients (TUI, scripts, etc).
 Desktop clients currently get repo sync tokens via Seahub → C server →
 RepoUserToken table. With Seahub gone, we need:
 ```
-POST /api/v1/repos/{id}/token  (with Bearer JWT)
+POST /api/silo/v1/repos/{id}/token  (with Bearer JWT)
 → generates 41-char token, writes to RepoUserToken table
 ← {"token": "..."}
 ```
@@ -207,7 +207,7 @@ type appHandler func(http.ResponseWriter, *http.Request) *appError
 - `keycache` - NEW: in-memory decrypt key cache (replaced searpc)
 - `authmgr` - NEW: password validation + JWT session tokens
 - `middleware` - NEW: Bearer token auth middleware
-- `api` - NEW: management API handlers (/api/v1/)
+- `api` - NEW: management API handlers (/api/silo/v1/)
 - `option` - config loading (seafile.conf, env vars)
 - `utils` - JWT generation (already using golang-jwt/jwt/v5)
 - `metrics` - prometheus metrics

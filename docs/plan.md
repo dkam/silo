@@ -32,9 +32,9 @@ calls. Move these into Go natively.
 - Token: UUID string, 1-hour TTL, cleanup every 5 minutes
 - Replace `parseWebaccessInfo()` in fileop.go to use local store
 - Add HTTP endpoints:
-  - `POST /api/v1/access-tokens` - create token (requires auth)
-  - `GET /api/v1/access-tokens/{token}` - validate (internal use)
-  - `DELETE /api/v1/access-tokens/{token}` - revoke
+  - `POST /api/silo/v1/access-tokens` - create token (requires auth)
+  - `GET /api/silo/v1/access-tokens/{token}` - validate (internal use)
+  - `DELETE /api/silo/v1/access-tokens/{token}` - revoke
 
 ### 1b. Decrypt Key Cache
 - Add `keycache` package with `sync.Map` + TTL goroutine
@@ -42,7 +42,7 @@ calls. Move these into Go natively.
 - 1-hour TTL, reaper every 60 seconds
 - Replace `parseCryptKey()` in fileop.go to use local cache
 - Add HTTP endpoint:
-  - `POST /api/v1/repos/{id}/password` - set password, derive + cache key
+  - `POST /api/silo/v1/repos/{id}/password` - set password, derive + cache key
 
 ### 1c. Event System
 - Replace RPC `publish_event` with local Go channels
@@ -66,7 +66,7 @@ calls. Move these into Go natively.
 ## Phase 2: Auth Endpoint (Let clients log in)
 
 ### 2a. User Authentication
-- Add `POST /api/v1/auth/login` endpoint
+- Add `POST /api/silo/v1/auth/login` endpoint
 - Validate email + password against `EmailUser` table in ccnet DB
 - Support all password formats:
   - PBKDF2SHA256 (current) - use Go's `crypto/pbkdf2`
@@ -77,7 +77,7 @@ calls. Move these into Go natively.
 - JWT signed with HS256 using existing `JWT_PRIVATE_KEY` config
 
 ### 2b. Auth Middleware
-- Bearer token middleware for `/api/v1/` routes
+- Bearer token middleware for `/api/silo/v1/` routes
 - Validate JWT, extract user email
 - Inject user into request context
 
@@ -91,14 +91,14 @@ Add REST endpoints for the most-needed repo operations. Incrementally replace
 what the 174 C RPC handlers do.
 
 ### Priority order (by what a TUI needs first):
-1. `GET /api/v1/repos` - list user's repos
-2. `GET /api/v1/repos/{id}` - repo details
-3. `POST /api/v1/repos` - create repo
-4. `DELETE /api/v1/repos/{id}` - delete repo
-5. `GET /api/v1/repos/{id}/dir/` - list directory
-6. `GET /api/v1/repos/{id}/file/` - file metadata
-7. `POST /api/v1/repos/{id}/file/` - upload file
-8. `DELETE /api/v1/repos/{id}/file/` - delete file
+1. `GET /api/silo/v1/repos` - list user's repos
+2. `GET /api/silo/v1/repos/{id}` - repo details
+3. `POST /api/silo/v1/repos` - create repo
+4. `DELETE /api/silo/v1/repos/{id}` - delete repo
+5. `GET /api/silo/v1/repos/{id}/dir/` - list directory
+6. `GET /api/silo/v1/repos/{id}/file/` - file metadata
+7. `POST /api/silo/v1/repos/{id}/file/` - upload file
+8. `DELETE /api/silo/v1/repos/{id}/file/` - delete file
 
 ### Later:
 - Sharing (add/remove/list shares)

@@ -15,7 +15,7 @@ class SeafileClient
   # --- Auth ---
 
   def login(email, password)
-    resp = post("/api/v1/auth/login", { email: email, password: password }, auth: false)
+    resp = post("/api/silo/v1/auth/login", { email: email, password: password }, auth: false)
     @token = resp["token"]
     resp
   end
@@ -23,27 +23,27 @@ class SeafileClient
   # --- Repos ---
 
   def list_repos
-    get("/api/v1/repos")
+    get("/api/silo/v1/repos")
   end
 
   def create_repo(name)
-    post("/api/v1/repos", { name: name })
+    post("/api/silo/v1/repos", { name: name })
   end
 
   def delete_repo(repo_id)
-    request(:delete, "/api/v1/repos/#{repo_id}")
+    request(:delete, "/api/silo/v1/repos/#{repo_id}")
   end
 
   # --- Tokens ---
 
   def create_access_token(repo_id:, op:, obj_id: "", one_time: false)
-    post("/api/v1/access-tokens", {
+    post("/api/silo/v1/access-tokens", {
       repo_id: repo_id, obj_id: obj_id, op: op, one_time: one_time
     })
   end
 
   def create_sync_token(repo_id)
-    post("/api/v1/repos/#{repo_id}/sync-token")
+    post("/api/silo/v1/repos/#{repo_id}/sync-token")
   end
 
   # --- Sync protocol ---

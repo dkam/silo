@@ -38,10 +38,10 @@ class TokensTest < Minitest::Test
   end
 
   def test_access_token_missing_fields
-    resp = client.post("/api/v1/access-tokens", { op: "download" })
+    resp = client.post("/api/silo/v1/access-tokens", { op: "download" })
     assert_equal 400, resp.status
 
-    resp = client.post("/api/v1/access-tokens", { repo_id: "some-id" })
+    resp = client.post("/api/silo/v1/access-tokens", { repo_id: "some-id" })
     assert_equal 400, resp.status
   end
 

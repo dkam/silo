@@ -10,19 +10,19 @@ the `EmailUser` table. We need a proper admin-gated API.
 
 ### Endpoints
 
-- `POST   /api/v1/users`              — create user
-- `GET    /api/v1/users`              — list users (paginated)
-- `GET    /api/v1/users/{email}`      — show a single user
-- `PUT    /api/v1/users/{email}`      — update password, active flag, is_staff
-- `DELETE /api/v1/users/{email}`      — delete user (and their owned repos? or
+- `POST   /api/silo/v1/users`              — create user
+- `GET    /api/silo/v1/users`              — list users (paginated)
+- `GET    /api/silo/v1/users/{email}`      — show a single user
+- `PUT    /api/silo/v1/users/{email}`      — update password, active flag, is_staff
+- `DELETE /api/silo/v1/users/{email}`      — delete user (and their owned repos? or
                                          refuse if non-empty?)
-- `POST   /api/v1/users/{email}/password` — admin password reset
-- `POST   /api/v1/auth/change-password`   — self-service password change
+- `POST   /api/silo/v1/users/{email}/password` — admin password reset
+- `POST   /api/silo/v1/auth/change-password`   — self-service password change
 
 ### Prerequisites
 
 - **Admin check helper**: query `is_staff` from `EmailUser` for the authed user.
-- **Admin middleware** (or per-handler guard): gate `/api/v1/users/*` behind
+- **Admin middleware** (or per-handler guard): gate `/api/silo/v1/users/*` behind
   `is_staff = 1`. Cache the flag on the JWT claim so we don't hit the DB on
   every request.
 - Decide: should `is_staff` also grant all-repo visibility in `CheckPerm` and
@@ -50,13 +50,13 @@ sharing should be straightforward.
 
 ### Endpoints
 
-- `POST   /api/v1/repos/{id}/shares`              — share to a user
-- `GET    /api/v1/repos/{id}/shares`              — list shares on a repo
-- `DELETE /api/v1/repos/{id}/shares/{email}`      — revoke a user share
-- `POST   /api/v1/repos/{id}/group-shares`        — share to a group
-- `GET    /api/v1/repos/{id}/group-shares`
-- `DELETE /api/v1/repos/{id}/group-shares/{gid}`
-- `GET    /api/v1/shared-with-me`                 — repos shared *to* the caller
+- `POST   /api/silo/v1/repos/{id}/shares`              — share to a user
+- `GET    /api/silo/v1/repos/{id}/shares`              — list shares on a repo
+- `DELETE /api/silo/v1/repos/{id}/shares/{email}`      — revoke a user share
+- `POST   /api/silo/v1/repos/{id}/group-shares`        — share to a group
+- `GET    /api/silo/v1/repos/{id}/group-shares`
+- `DELETE /api/silo/v1/repos/{id}/group-shares/{gid}`
+- `GET    /api/silo/v1/shared-with-me`                 — repos shared *to* the caller
 
 ### Permissions
 
@@ -76,13 +76,13 @@ protection. Lower priority than user-to-user sharing.
 Silo already has a `Group` table inherited from ccnet but no way to manage it.
 To make group sharing useful we need:
 
-- `POST   /api/v1/groups`                          — create group
-- `GET    /api/v1/groups`                          — list groups the caller is in
-- `GET    /api/v1/groups/{id}`
-- `DELETE /api/v1/groups/{id}`                     — owner only
-- `POST   /api/v1/groups/{id}/members`             — add member
-- `DELETE /api/v1/groups/{id}/members/{email}`     — remove member
-- `PUT    /api/v1/groups/{id}/members/{email}`     — promote/demote
+- `POST   /api/silo/v1/groups`                          — create group
+- `GET    /api/silo/v1/groups`                          — list groups the caller is in
+- `GET    /api/silo/v1/groups/{id}`
+- `DELETE /api/silo/v1/groups/{id}`                     — owner only
+- `POST   /api/silo/v1/groups/{id}/members`             — add member
+- `DELETE /api/silo/v1/groups/{id}/members/{email}`     — remove member
+- `PUT    /api/silo/v1/groups/{id}/members/{email}`     — promote/demote
 
 Group membership should participate in `CheckPerm` via the existing
 `RepoGroup` table.
@@ -193,9 +193,9 @@ enforced on the upload path today, and there's no API to set a user's cap.
   code already present in `http_code.go`) before the block write, not
   after.
 - **Admin API**: no endpoints to read or set quota. Wanted:
-  - `GET /api/v1/users/{email}/quota` — returns `{quota, usage}`
-  - `PUT /api/v1/users/{email}/quota` — set cap (admin only)
-  - `GET /api/v1/account/quota` — self lookup, no admin needed
+  - `GET /api/silo/v1/users/{email}/quota` — returns `{quota, usage}`
+  - `PUT /api/silo/v1/users/{email}/quota` — set cap (admin only)
+  - `GET /api/silo/v1/account/quota` — self lookup, no admin needed
 - **Default quota config**: surface `option.DefaultQuota` as an env var
   (`SEAFILE_DEFAULT_QUOTA`) so it's settable without editing
   `seafile.conf`.
@@ -223,7 +223,7 @@ shows garbage. Needs:
 
 Not planned in the short term. Upstream's Seahub is a Django app and we
 explicitly walked away from that. If a web UI happens, it should be a small
-SPA (HTMX or similar) served from the same Go binary, talking to `/api/v1/`.
+SPA (HTMX or similar) served from the same Go binary, talking to `/api/silo/v1/`.
 
 ## Admin / Ops
 

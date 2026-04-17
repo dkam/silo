@@ -14,33 +14,33 @@ class AuthTest < Minitest::Test
 
   def test_login_wrong_password
     c = SeafileClient.new(seafile_url)
-    resp = c.post("/api/v1/auth/login", { email: seafile_email, password: "wrong" }, auth: false)
+    resp = c.post("/api/silo/v1/auth/login", { email: seafile_email, password: "wrong" }, auth: false)
     assert_equal 401, resp.status
   end
 
   def test_login_missing_fields
     c = SeafileClient.new(seafile_url)
 
-    resp = c.post("/api/v1/auth/login", { email: seafile_email }, auth: false)
+    resp = c.post("/api/silo/v1/auth/login", { email: seafile_email }, auth: false)
     assert_equal 400, resp.status
 
-    resp = c.post("/api/v1/auth/login", { password: "whatever" }, auth: false)
+    resp = c.post("/api/silo/v1/auth/login", { password: "whatever" }, auth: false)
     assert_equal 400, resp.status
   end
 
   def test_login_nonexistent_user
     c = SeafileClient.new(seafile_url)
-    resp = c.post("/api/v1/auth/login", { email: "nobody@example.com", password: "x" }, auth: false)
+    resp = c.post("/api/silo/v1/auth/login", { email: "nobody@example.com", password: "x" }, auth: false)
     assert_equal 401, resp.status
   end
 
   def test_protected_endpoints_reject_no_auth
     c = SeafileClient.new(seafile_url)
 
-    resp = c.request(:get, "/api/v1/repos", auth: false)
+    resp = c.request(:get, "/api/silo/v1/repos", auth: false)
     assert_equal 401, resp.status
 
-    resp = c.request(:post, "/api/v1/repos", body: { name: "x" }, auth: false)
+    resp = c.request(:post, "/api/silo/v1/repos", body: { name: "x" }, auth: false)
     assert_equal 401, resp.status
   end
 

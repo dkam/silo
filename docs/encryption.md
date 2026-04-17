@@ -12,7 +12,7 @@ commit), but **creation is not implemented anywhere**:
 
 - `repomgr.CreateRepo` (`fileserver/repomgr/repomgr.go:879`) hardcodes
   `is_encrypted=0` and has no password parameter.
-- Neither `/api/v1/repos` nor `/api2/repos/` accepts a password.
+- Neither `/api/silo/v1/repos` nor `/api2/repos/` accepts a password.
 - Upstream Seafile only ever created encrypted libraries through **Seahub**
   (the Python/Django web UI), which does the crypto in JavaScript in the
   browser. Silo has no Seahub and no web UI, so there is no path at all today
@@ -76,7 +76,7 @@ TUI (cmd 'n' on repo list)
   │            PBKDF2/AES-ECB → salt, random_key, magic
   ▼
 client.APIClient.CreateEncryptedRepo(name, repoID, encVersion, magic, randomKey, salt)
-  │  POST /api/v1/repos  {name, repo_id, enc_version, magic, random_key, salt}
+  │  POST /api/silo/v1/repos  {name, repo_id, enc_version, magic, random_key, salt}
   ▼
 api.CreateRepoHandler
   │  if enc fields present → repomgr.CreateEncryptedRepo(...)
@@ -248,7 +248,7 @@ func (c *APIClient) CreateEncryptedRepo(
         "salt":        enc.Salt,
     }
     var repo Repo
-    err := c.doRequest("POST", "/api/v1/repos", body, &repo)
+    err := c.doRequest("POST", "/api/silo/v1/repos", body, &repo)
     ...
 }
 ```

@@ -41,7 +41,7 @@ Silo also ships with `silo`, a terminal UI built on [Bubble Tea](https://github.
 - Persistent API tokens for SeaDrive compatibility
 - Repo create / list / delete
 - File operations: upload, download, mkdir, rename, move, delete
-- Directory listing via `/api/v1/repos/{id}/dir/`
+- Directory listing via `/api/silo/v1/repos/{id}/dir/`
 - Full Seafile sync protocol for desktop and SeaDrive clients
 - In-process notification server (WebSocket `/notification`) so SeaDrive / Seafile Desktop get push events on repo updates instead of polling
 - Embedded SQLite backend (WAL mode, read/write connection split)
@@ -205,7 +205,7 @@ Silo has been tested with:
 - **SeaDrive** 3.0.21 — sync and file operations via `/api2/` endpoints
 - **Seafile Desktop** — sync via the standard repo token protocol
 
-The JWT management API (`/api/v1/`) is new and Silo-specific; existing Seafile clients don't know about it.
+The JWT management API (`/api/silo/v1/`) is new and Silo-specific; existing Seafile clients don't know about it.
 
 ## What's not implemented
 
@@ -225,7 +225,7 @@ See [`docs/future-features.md`](docs/future-features.md) for the rough roadmap.
 
 ```
 fileserver/        Active Go server
-  ├── api/         Management API handlers (/api/v1/*)
+  ├── api/         Management API handlers (/api/silo/v1/*)
   ├── authmgr/     Password validation + JWT
   ├── dbutil/      SQLite connection management and query helpers
   ├── share/       Permission checking

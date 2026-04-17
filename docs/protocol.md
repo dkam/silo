@@ -23,7 +23,7 @@ Three coexisting auth mechanisms, each for a different client surface:
 
 | Scheme | Header | Used by | Validated against |
 |---|---|---|---|
-| JWT Bearer | `Authorization: Bearer <jwt>` | silo (TUI), `/api/v1/*` | `authmgr.ValidateSessionToken` (24h expiry) |
+| JWT Bearer | `Authorization: Bearer <jwt>` | silo (TUI), `/api/silo/v1/*` | `authmgr.ValidateSessionToken` (24h expiry) |
 | API Token | `Authorization: Token <40-hex>` | SeaDrive, `/api2/*` | `apitokenstore.Lookup` (persistent in `ApiToken` SQL table) |
 | Repo Token | `Seafile-Repo-Token: <40-hex>` | All sync clients, `/repo/*`, `/accessible-repos` | `repomgr.GetEmailByToken` (persistent in `RepoUserToken` SQL table) |
 
@@ -34,25 +34,25 @@ The middleware for each lives in `fileserver/middleware/`:
 
 ## Endpoints
 
-### Native management API — `/api/v1/*`
+### Native management API — `/api/silo/v1/*`
 
 JSON request/response bodies. Used by the silo TUI. Protected by
 `RequireAuth` (JWT Bearer).
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/v1/auth/login` | Email + password → JWT |
-| POST | `/api/v1/access-tokens` | Create a time-limited access token for a specific object |
-| GET | `/api/v1/repos` | List repos owned by authenticated user |
-| POST | `/api/v1/repos` | Create a new repo |
-| DELETE | `/api/v1/repos/{repoid}` | Delete a repo |
-| GET | `/api/v1/repos/{repoid}/dir/?path=` | List directory contents |
-| POST | `/api/v1/repos/{repoid}/mkdir` | Create a directory |
-| DELETE | `/api/v1/repos/{repoid}/file?path=` | Delete a file |
-| GET | `/api/v1/repos/{repoid}/download?path=` | Download file (302 → `/files/{token}/...`) |
-| POST | `/api/v1/repos/{repoid}/rename` | Rename a file or directory |
-| POST | `/api/v1/repos/{repoid}/move` | Move a file or directory |
-| POST | `/api/v1/repos/{repoid}/sync-token` | Generate a repo sync token (for subsequent sync-protocol calls) |
+| POST | `/api/silo/v1/auth/login` | Email + password → JWT |
+| POST | `/api/silo/v1/access-tokens` | Create a time-limited access token for a specific object |
+| GET | `/api/silo/v1/repos` | List repos owned by authenticated user |
+| POST | `/api/silo/v1/repos` | Create a new repo |
+| DELETE | `/api/silo/v1/repos/{repoid}` | Delete a repo |
+| GET | `/api/silo/v1/repos/{repoid}/dir/?path=` | List directory contents |
+| POST | `/api/silo/v1/repos/{repoid}/mkdir` | Create a directory |
+| DELETE | `/api/silo/v1/repos/{repoid}/file?path=` | Delete a file |
+| GET | `/api/silo/v1/repos/{repoid}/download?path=` | Download file (302 → `/files/{token}/...`) |
+| POST | `/api/silo/v1/repos/{repoid}/rename` | Rename a file or directory |
+| POST | `/api/silo/v1/repos/{repoid}/move` | Move a file or directory |
+| POST | `/api/silo/v1/repos/{repoid}/sync-token` | Generate a repo sync token (for subsequent sync-protocol calls) |
 
 ### Seahub compatibility API — `/api2/*`
 

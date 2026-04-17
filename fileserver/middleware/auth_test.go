@@ -25,7 +25,7 @@ func TestRequireAuthSuccess(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/api/v1/repos", nil)
+	req := httptest.NewRequest("GET", "/api/silo/v1/repos", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 
@@ -44,7 +44,7 @@ func TestRequireAuthMissingHeader(t *testing.T) {
 		t.Fatal("handler should not be called")
 	}))
 
-	req := httptest.NewRequest("GET", "/api/v1/repos", nil)
+	req := httptest.NewRequest("GET", "/api/silo/v1/repos", nil)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -70,7 +70,7 @@ func TestRequireAuthInvalidFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/api/v1/repos", nil)
+			req := httptest.NewRequest("GET", "/api/silo/v1/repos", nil)
 			req.Header.Set("Authorization", tt.header)
 			rr := httptest.NewRecorder()
 
@@ -88,7 +88,7 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 		t.Fatal("handler should not be called")
 	}))
 
-	req := httptest.NewRequest("GET", "/api/v1/repos", nil)
+	req := httptest.NewRequest("GET", "/api/silo/v1/repos", nil)
 	req.Header.Set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjE1MDAwMDAwMDB9.invalid")
 	rr := httptest.NewRecorder()
 
@@ -109,7 +109,7 @@ func TestRequireAuthCaseInsensitiveBearer(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/api/v1/repos", nil)
+	req := httptest.NewRequest("GET", "/api/silo/v1/repos", nil)
 	req.Header.Set("Authorization", "bearer "+token)
 	rr := httptest.NewRecorder()
 

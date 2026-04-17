@@ -142,7 +142,7 @@ func (c *APIClient) reloginLocked() error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.sendRequest("POST", "/api/v1/auth/login", bodyBytes, "")
+	resp, err := c.sendRequest("POST", "/api/silo/v1/auth/login", bodyBytes, "")
 	if err != nil {
 		return err
 	}
@@ -171,13 +171,13 @@ func (c *APIClient) Login(email, password string) error {
 
 func (c *APIClient) ListRepos() ([]Repo, error) {
 	var repos []Repo
-	err := c.doRequest("GET", "/api/v1/repos", nil, &repos)
+	err := c.doRequest("GET", "/api/silo/v1/repos", nil, &repos)
 	return repos, err
 }
 
 func (c *APIClient) CreateRepo(name string) (*Repo, error) {
 	var repo Repo
-	err := c.doRequest("POST", "/api/v1/repos", map[string]string{"name": name}, &repo)
+	err := c.doRequest("POST", "/api/silo/v1/repos", map[string]string{"name": name}, &repo)
 	if err != nil {
 		return nil, err
 	}
@@ -190,35 +190,35 @@ func (c *APIClient) ListDir(repoID, path string) ([]DirEntry, error) {
 	}
 	escapedPath := url.QueryEscape(path)
 	var entries []DirEntry
-	err := c.doRequest("GET", fmt.Sprintf("/api/v1/repos/%s/dir/?path=%s", repoID, escapedPath), nil, &entries)
+	err := c.doRequest("GET", fmt.Sprintf("/api/silo/v1/repos/%s/dir/?path=%s", repoID, escapedPath), nil, &entries)
 	return entries, err
 }
 
 func (c *APIClient) DeleteRepo(repoID string) error {
-	return c.doRequest("DELETE", "/api/v1/repos/"+repoID, nil, nil)
+	return c.doRequest("DELETE", "/api/silo/v1/repos/"+repoID, nil, nil)
 }
 
 func (c *APIClient) Mkdir(repoID, path string) error {
-	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/mkdir?path=%s", repoID, url.QueryEscape(path)), nil, nil)
+	return c.doRequest("POST", fmt.Sprintf("/api/silo/v1/repos/%s/mkdir?path=%s", repoID, url.QueryEscape(path)), nil, nil)
 }
 
 func (c *APIClient) RenameFile(repoID, path, newName string) error {
-	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/rename?path=%s&newname=%s",
+	return c.doRequest("POST", fmt.Sprintf("/api/silo/v1/repos/%s/rename?path=%s&newname=%s",
 		repoID, url.QueryEscape(path), url.QueryEscape(newName)), nil, nil)
 }
 
 func (c *APIClient) MoveFile(repoID, src, dst string) error {
-	return c.doRequest("POST", fmt.Sprintf("/api/v1/repos/%s/move?src=%s&dst=%s",
+	return c.doRequest("POST", fmt.Sprintf("/api/silo/v1/repos/%s/move?src=%s&dst=%s",
 		repoID, url.QueryEscape(src), url.QueryEscape(dst)), nil, nil)
 }
 
 func (c *APIClient) DeleteFile(repoID, path string) error {
-	return c.doRequest("DELETE", fmt.Sprintf("/api/v1/repos/%s/file?path=%s", repoID, url.QueryEscape(path)), nil, nil)
+	return c.doRequest("DELETE", fmt.Sprintf("/api/silo/v1/repos/%s/file?path=%s", repoID, url.QueryEscape(path)), nil, nil)
 }
 
 func (c *APIClient) DownloadFile(repoID, repoPath, localPath string) error {
 	escapedPath := url.QueryEscape(repoPath)
-	downloadURL := fmt.Sprintf("%s/api/v1/repos/%s/download?path=%s", c.BaseURL, repoID, escapedPath)
+	downloadURL := fmt.Sprintf("%s/api/silo/v1/repos/%s/download?path=%s", c.BaseURL, repoID, escapedPath)
 
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	if err != nil {
@@ -290,7 +290,7 @@ func (c *APIClient) UploadFile(repoID, parentDir, localPath string) error {
 	var tokenResp struct {
 		Token string `json:"token"`
 	}
-	if err := c.doRequest("POST", "/api/v1/access-tokens", map[string]interface{}{
+	if err := c.doRequest("POST", "/api/silo/v1/access-tokens", map[string]interface{}{
 		"repo_id": repoID,
 		"obj_id":  string(objID),
 		"op":      "upload",

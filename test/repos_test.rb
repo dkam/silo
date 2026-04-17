@@ -21,7 +21,7 @@ class ReposTest < Minitest::Test
   end
 
   def test_create_repo_missing_name
-    resp = client.post("/api/v1/repos", { name: "" })
+    resp = client.post("/api/silo/v1/repos", { name: "" })
     assert_equal 400, resp.status
   end
 
