@@ -45,7 +45,7 @@ Silo also ships with `silo`, a terminal UI built on [Bubble Tea](https://github.
 - Full Seafile sync protocol for desktop and SeaDrive clients
 - In-process notification server (WebSocket `/notification`) so SeaDrive / Seafile Desktop get push events on repo updates instead of polling
 - Embedded SQLite backend (WAL mode, read/write connection split)
-- Auto-generated ephemeral JWT signing key if `JWT_PRIVATE_KEY` is unset
+- Auto-generated ephemeral JWT signing key if `SILO_JWT_SECRET` is unset
 - Seafile-compatible endpoints: `/api2/auth-token/`, `/api2/repos/`, `/api2/repos/{id}/repo-tokens/`, `/api2/repos/{id}/download-info/`, plus the full sync path
 
 ## Quick start
@@ -117,7 +117,6 @@ Then `docker compose up -d`.
 ```bash
 SILO_ADMIN_EMAIL=admin@example.com \
 SILO_ADMIN_PASSWORD=changeme \
-SILO_LOG_TO_STDOUT=1 \
 ./silo serve -d /path/to/silo-data
 ```
 
@@ -131,22 +130,19 @@ In another terminal:
 ./silo tui http://localhost:8082
 ```
 
-The server URL can also come from `SILO_URL` / `SEAFILE_URL`, or be derived from the same `SEAFILE_FILESERVER_HOST` / `SEAFILE_FILESERVER_PORT` the daemon reads. If none are set, it defaults to `http://localhost:8082`.
+The server URL can also come from `SILO_URL`. If unset, it defaults to `http://localhost:8082`.
 
-Auto-login kicks in if both an email and password are available. The TUI checks, in order:
-
-- `SILO_EMAIL` / `SILO_PASSWORD`
-- `SEAFILE_EMAIL` / `SEAFILE_PASSWORD`
-- `SEAFILE_ADMIN_EMAIL` / `SEAFILE_ADMIN_PASSWORD` (the same vars used to bootstrap the admin account, so one `.envrc` can drive both the server and the client)
+Auto-login kicks in if both `SILO_EMAIL` and `SILO_PASSWORD` are set.
 
 A typical `.envrc` for local development with [direnv](https://direnv.net/):
 
 ```bash
-export SEAFILE_FILESERVER_HOST=127.0.0.1
-export SEAFILE_FILESERVER_PORT=8083
-export SEAFILE_ADMIN_EMAIL=admin@seafile.local
-export SEAFILE_ADMIN_PASSWORD=test
-export SEAFILE_LOG_TO_STDOUT=true
+export SILO_HOST=127.0.0.1
+export SILO_PORT=8082
+export SILO_ADMIN_EMAIL=admin@example.com
+export SILO_ADMIN_PASSWORD=changeme
+export SILO_EMAIL=admin@example.com
+export SILO_PASSWORD=changeme
 ```
 
 With that loaded, `./silo serve -d /tmp/silo-data` and `./silo tui` both pick up the same host, port, and credentials — no flags needed.
@@ -178,12 +174,16 @@ silo repo rm <repo-id>
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `SEAFILE_FILESERVER_HOST` | Bind address | `0.0.0.0` (or from `seafile.conf` if provided) |
-| `SEAFILE_FILESERVER_PORT` | Listen port | `8082` |
-| `SEAFILE_ADMIN_EMAIL` | Create admin user on startup | — |
-| `SEAFILE_ADMIN_PASSWORD` | Admin password | — |
-| `JWT_PRIVATE_KEY` | Session token signing key | auto-generated (ephemeral) |
-| `SEAFILE_LOG_TO_STDOUT` | Write logs to stdout instead of file | unset |
+| `SILO_DATA_DIR` | Data directory | `~/.local/share/silo` |
+| `SILO_HOST` | Bind address | `0.0.0.0` |
+| `SILO_PORT` | Listen port | `8082` |
+| `SILO_ADMIN_EMAIL` | Create admin user on startup | — |
+| `SILO_ADMIN_PASSWORD` | Admin password | — |
+| `SILO_JWT_SECRET` | JWT signing key | auto-generated (ephemeral) |
+| `SILO_LOG_LEVEL` | Log level: debug, info, warn, error | — |
+| `SILO_URL` | Server base URL (client/TUI) | `http://localhost:8082` |
+| `SILO_EMAIL` | Account email (client/TUI) | — |
+| `SILO_PASSWORD` | Account password (client/TUI) | — |
 
 Env vars take precedence over `seafile.conf`, so the same binary can be pointed at different deployments without editing files. `seafile.conf` itself is optional — if you don't pass `-C`, Silo uses compiled defaults.
 
@@ -191,9 +191,9 @@ Env vars take precedence over `seafile.conf`, so the same binary can be pointed 
 
 | Flag | Purpose |
 |---|---|
-| `-d <dir>` | Data directory (storage, SQLite files, logs). **Required.** |
+| `-d <dir>` | Data directory (default: `$SILO_DATA_DIR` or `~/.local/share/silo`) |
 | `-C <file>` | Path to `seafile.conf` (optional; only needed to override compiled defaults) |
-| `-l <file>` | Log file path (ignored if `SEAFILE_LOG_TO_STDOUT` is set) |
+| `-l <file>` | Log file path |
 | `-P <file>` | PID file path |
 | `-debug` | Log every HTTP request |
 
@@ -211,7 +211,7 @@ The JWT management API (`/api/v1/`) is new and Silo-specific; existing Seafile c
 
 Silo is a lean rewrite focused on the sync path and a minimal management API. The following upstream Seafile features are **not** available:
 
-- No user management API — users are created via `SEAFILE_ADMIN_EMAIL`/`SEAFILE_ADMIN_PASSWORD` or direct database insert
+- No user management API — users are created via `SILO_ADMIN_EMAIL`/`SILO_ADMIN_PASSWORD` or direct database insert
 - No repo sharing API — users can only access repos they own (share tables exist in the schema but have no HTTP endpoints)
 - No group management API
 - No `is_staff` / admin privilege check in the API layer — all authenticated users have equal permissions

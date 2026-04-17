@@ -274,7 +274,7 @@ func (m model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) renderLogin() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Seafile Login") + "\n\n")
+	b.WriteString(titleStyle.Render("Silo Login") + "\n\n")
 	b.WriteString("Email:\n")
 	b.WriteString(m.emailInput.View() + "\n\n")
 	b.WriteString("Password:\n")
