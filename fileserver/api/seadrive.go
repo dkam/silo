@@ -92,6 +92,10 @@ type seadriveRepo struct {
 
 // SeaDriveCreateRepoHandler handles POST /api2/repos/. SeaDrive sends a
 // form-encoded body with the library name.
+//
+// SeaDrive expects the response to contain repo_id, head_commit_id, and token
+// (a sync token). Without all three it logs "Invalid resp from create repo api"
+// and fails to sync the newly created library.
 func SeaDriveCreateRepoHandler(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUserEmail(r)
 
@@ -112,13 +116,24 @@ func SeaDriveCreateRepoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, seadriveRepo{
-		ID:         repoID,
-		Name:       name,
-		Owner:      user,
-		Permission: "rw",
-		Type:       "repo",
-		Version:    1,
+	repo := repomgr.Get(repoID)
+	if repo == nil {
+		log.Errorf("Repo %s not found after creation", repoID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	token, err := repomgr.GenerateRepoToken(repoID, user)
+	if err != nil {
+		log.Errorf("Failed to generate sync token for new repo %s: %v", repoID, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"repo_id":        repoID,
+		"head_commit_id": repo.HeadCommitID,
+		"token":          token,
 	})
 }
 
